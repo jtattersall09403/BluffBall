@@ -4,21 +4,18 @@
 # Research into optimisation options not as positive as hoped. Brute force approach??
 
 ### How about recursively applying the single transfer algorithm?
-bank <- 10
-
 optim_single <- function(myteam2, fpl.3, bank) {
   
   # Single transfers
   single <- myteam2 %>%
     inner_join(select(fpl.3, id, web_name, pos, now_cost, team, goalprob, xp), by = c('pos' = 'pos')) %>%
-    filter(xp.y > xp.x,
-           now_cost < price + bank,
-           !id %in% myteam2$element) %>%
+    filter(!id %in% myteam2$element,
+           now_cost <= price + bank) %>%
     mutate(xpdiff = xp.y - xp.x) %>%
     arrange(desc(xpdiff))
   
   # Check if transfer increases xp
-  if (!is.na(single$xpdiff[1])) {
+  if (single$xpdiff[1] > 0) {
     # Choose transfers out and in
     trans_out <- c(single$element[1])
     trans_in <- c(single$id[1])
@@ -37,7 +34,7 @@ optim_single <- function(myteam2, fpl.3, bank) {
   } else {
     
     # Alert
-    print("optimal team reached")
+    print("Optimal team reached")
     
     # Return original team
     trans <- myteam2
@@ -47,20 +44,34 @@ optim_single <- function(myteam2, fpl.3, bank) {
   return(trans)
 }
 
-trans1 <- optim_single(myteam2, fpl.3, bank)
-trans2 <- optim_single(trans1, fpl.3, bank)
+
 
 # Initialise loop
-trans <- list()
-trans[[1]] <- myteam2
+i <- 1
+bank <- 10
 iter_max <- 100
-for (i in 2:iter_max) {
-  
-  # Optimise
-  trans[[i]] <- optim_single(trans[[i-1]], fpl.3, bank)
-  
-  # Record progress
-  print(paste0(round(100*i/iter_max,1), "% processed"))
-  
+trans0 <- myteam2
+trans1 <- optim_single(myteam2, fpl.3, bank)
+
+# Get best single transfer team
+while (sum(trans1$xp) > sum(trans0$xp) & i <= iter_max) {
+  trans0 <- trans1
+  trans1 <- optim_single(trans0, fpl.3, bank)
+  i <- i + 1
+  print(paste(i, "iterations processed"))
 }
+
+View(trans1)
+
+# Get best starting 11
+opt_single <- getBestTeam(trans1)
+View(opt_single)
+
+# Total xp - yours vs dreamteam
+myteam3 %>% mutate(xp = ifelse(captain == 1, xp *2, xp)) %>% ungroup %>% summarise(xp = sum(xp)) %>% unlist
+opt_single %>% mutate(xp = ifelse(captain == 1, xp *2, xp)) %>% ungroup %>% summarise(xp = sum(xp)) %>% unlist
+
+trans1[!trans1$element %in% opt_single$element,]
+
+
 
