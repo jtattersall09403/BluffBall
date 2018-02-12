@@ -108,7 +108,7 @@ keepers <- fpldat %>%
 # Append goalkeepers
 names(keepers) <- names(dedup)
 fpl <- rbind(as.data.frame(dedup), as.data.frame(keepers)) %>%
-  mutate(goalprob = goalprob - probBrace - probHt)
+  mutate(goalprob1 = goalprob - probBrace - probHt)
 
 
 # ------------------------ Predict likelihood of playing 60 minutes ------------------------
@@ -169,7 +169,7 @@ print(c(paste0(100*round(sum(!is.na(fpl.2$goalprob))/nrow(fpl.2[fpl.2$pos != 'Go
         paste0(100*round(sum(!is.na(fpl.2$cs))/nrow(fpl.2),3), '% of players have clean sheet odds'),
         paste0(100*round(sum(!is.na(fpl.2$prob60))/nrow(fpl.2),3), '% of players have a playing time prediction')))
 
-# Show who's goalscorer odds are missing
+# Show whose goalscorer odds are missing
 fpl.2 %>%
   filter(pos != 'Goalkeeper', (is.na(goalprob) | is.na(prob60))) %>%
   select(web_name, team, goalprob, prob60) %>%
@@ -188,18 +188,20 @@ fpl.3 <- fpl.2 %>%
          chance_of_playing_next_round = ifelse(is.na(chance_of_playing_next_round), 100, chance_of_playing_next_round)) %>%
   mutate(games = total_points/points_per_game,
          prob60 = prob60 * chance_of_playing_next_round/100) %>%
+  mutate(probas = as.numeric(assists)/as.numeric(games),
+         prob0 = .2 * (1-prob60),
+         probless60 = .8 * (1-prob60)) %>%
   mutate(prob60 = ifelse(prob60 < 0.08, 0, prob60)) %>%
-  mutate(xgp1 = goalprob * goal,
-         xgp2 = probBrace * goal,
-         xgp3 = probHt * goal,
+  mutate(xgp1 = goalprob1 * goal,
+         xgp2 = probBrace * goal * 2,
+         xgp3 = probHt * goal * 3,
          xm = prob60 * 90,
          xgp = xgp1 + xgp2 + xgp3) %>%
   mutate(xm = ifelse(is.na(xm), 0, xm)) %>%
   mutate(xpap = ifelse(xm >= 60, 2, ifelse(xm > 0, 1, 0)),
          xpcs = prob60 * cs * cleansheet,
-         xpas = prob60 * as.numeric(assists)/as.numeric(games) * 3) %>%
-  mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs, ifelse(is.na(xpas),0,xpas),
-         goalprob = goalprob + probBrace + probHt)
+         xpas = prob60 * probas * 3) %>%
+  mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs, ifelse(is.na(xpas),0,xpas))
 
 fpl.3 %>%
   ungroup %>%
@@ -232,67 +234,7 @@ View(arrange(myteam2, position))
 
 #  ---------------------------------- Pick best team ----------------------------------
 
-# Change this to only try subbing in players with those with lower xp than them
-
-# All possibile combos
-combns <- combn(1:15, 11, simplify=T) %>% as.data.frame
-
-# Function to check if combination is legal
-legal <- function(team) {
-  
-  # Initialise result
-  result <- TRUE
-  
-  # Count players in each position
-  team2 <- team %>%
-    group_by(pos) %>%
-    summarise(num = n()) %>%
-    dcast( . ~ pos, value.var = 'num')
-  
-  # Check all positions present
-  if (sum(points$pos %in% names(team2)) == 4) {
-    
-    # Check correct number in each position
-    if (team2$Goalkeeper != 1 |
-        team2$Defender < 3 |
-        team2$Defender > 5 |
-        team2$Midfielder < 2 |
-        team2$Midfielder > 5 |
-        team2$Forward > 3 |
-        team2$Forward < 1) {result <- FALSE}
-    
-  } else {
-    result <- FALSE 
-  }
-  
-  return(result)
-}
-
-# xp for each combination
-i <- 0
-xptots <- apply(combns, 2, function(x) {
-  if (legal(myteam2[x,])) {
-    xp <- myteam2[x,] %>% ungroup %>% summarise(xp = sum(xp)) %>% unlist
-  } else {
-    xp <- 0
-  }
-  
-  i <<- i + 1
-  print(paste('Processed', i))
-  return(xp)
-})
-
-# Best combination
-best <- combns[,match(max(xptots), xptots)]
-
-# Create team
-myteam3 <- myteam2[best,] %>%
-  mutate(order = case_when(pos == 'Goalkeeper' ~ 1,
-                           pos == 'Defender' ~ 2,
-                           pos == 'Midfielder' ~ 3,
-                           pos == 'Forward' ~ 4)) %>%
-  arrange(order) %>%
-  mutate(captain = ifelse(xp == max(myteam2[best,'xp']), 1, 0))
+myteam3 <- getBestTeam(myteam2)
 
 View(myteam3)
 
@@ -321,7 +263,7 @@ myteam2 %>%
 myteam2$dum <- 1
 squad <- myteam2 %>%
   select(dum,  first_name.x, player_name, pos, team, price, xp) %>%
-  inner_join(myteam3, by = 'dum') %>%
+  inner_join(myteam2, by = 'dum') %>%
   filter(!(first_name.x.x == first_name.x.y & player_name.x == player_name.y)) %>%
   mutate(pos = paste(pos.x, pos.y, sep="-"),
          price = price.x + price.y,
@@ -368,46 +310,45 @@ double_transfers <- double_transfers[!duplicated(data.frame(t(apply(double_trans
 
 View(double_transfers)
 
-# To add - expected points with new team after transfer(s)
+# ------------------------ Expected points after transfer(s) --------
 
+# --------- Single transfers ------
+
+# Choose transfers out and in
+trans_out <- c(199)
+trans_in <- c(280)
+
+# Get team
+myteam_1trans <- transfers(myteam2, fpl.3, trans_in, trans_out)
+
+# Total xp
+totxp <- myteam_1trans %>% mutate(xp = ifelse(captain == 1, xp *2, xp)) %>% ungroup %>% summarise(xp = sum(xp)) %>%
+  mutate(xp = xp - (length(trans_out)-ft)*4) %>% 
+  unlist
+totxp
+
+# --------- Double transfer -------
+
+# Choose transfers out and in
+trans_out <- c(199, 100)
+trans_in <- c(104, 357)
+
+# Get team
+myteam_2trans <- transfers(myteam2, fpl.3, trans_in, trans_out)
+
+# Total xp
+totxp <- myteam_2trans %>% mutate(xp = ifelse(captain == 1, xp *2, xp)) %>% ungroup %>% summarise(xp = sum(xp)) %>%
+  mutate(xp = xp - (length(trans_out)-ft)*4) %>% 
+  unlist
+totxp
 
 # ------------------------ Points simulations -----------------------
 
 # Full team details
-teamdetails <- inner_join(myteam3, fpl.3, by = c('element'='id')) %>%
-  mutate(probas = as.numeric(assists)/as.numeric(games),
-         anygoal = sum(goalprob.y, probBrace, probHt, na.rm = T),
-         prob0 = .2 * (1-prob60),
-         probless60 = .8 * (1-prob60))
-
-
-# Define points sim function
-pointssim <- function(x) {
-  
-  x <- teamdetails %>% filter(element == x)
-  
-  # Appearances
-  ap <- sample(0:2, 100000, prob=c(x$prob0, x$probless60, x$prob60), replace = TRUE)
-  
-  # Clean sheets
-  cs <- sample(0:1, 100000, prob=c(1-x$cs*x$prob60, x$cs*x$prob60), replace = TRUE) * points$cleansheet[match(x$pos.x, points$pos)]
-  
-  # Assists
-  as <- sample(0:1, 100000, prob=c(1-x$probas*x$prob60, x$probas*x$prob60), replace = TRUE) * 3
-  
-  # Goals
-  g <- sample(0:3, 100000,
-              prob=c(1-x$anygoal, x$goalprob.y, x$probBrace, x$probHt), replace = TRUE) * points$goal[match(x$pos.x, points$pos)]
-  
-  # Total points
-  p <- cbind(ap, cs, as, g) %>%
-    rowSums() * (x$captain + 1)
-    
-  return(p)
-}
+teamdetails <- inner_join(myteam3, fpl.3, by = c('element'='id'))
 
 # Simulate points for each player
-teamsim <- lapply(teamdetails$element, pointssim) %>%
+teamsim <- lapply(teamdetails$element, pointssim, teamdetails) %>%
   do.call(cbind, .)
 
 # Get total team points
@@ -416,7 +357,7 @@ teamsimpoints <- teamsim %>%
   as.data.frame %>%
   rename(points = '.')
 
-# Visualise probavilities
+# Visualise probabilities
 teamsimpoints %>%
   ggplot(aes(x=points)) +
   geom_histogram(fill = 'dodgerblue3', color = 'dodgerblue4', bins = 30)
@@ -426,9 +367,5 @@ mean(teamsimpoints$points)
 percentile = ecdf(teamsimpoints$points)
 
 # Use the below to see likelihood of achieving a certain score or higher
-(1-percentile(100))*100
-
+(1-percentile(50))*100
 quantile(teamsimpoints$points)
-
-
-
