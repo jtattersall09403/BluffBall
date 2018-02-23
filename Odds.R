@@ -7,27 +7,37 @@ library(fplr)
 source('./GetFPLData.R')
 source('./getOdds.R')
 
+# ----------------- FPL data ---------------
+
+# Get player and team data
+fpldat <- getFPLSummary() %>%
+  mutate('player_name' = paste(first_name, second_name))
+
+# Get teams
+teams <- as.character(unique(fpldat$team))
+teams[teams == 'Spurs'] <- 'Tottenham'
+
 
 # -------------------------------------- Goalscorer odds -----------------------
 
-url <- 'http://www.paddypower.com/football/football-matches/premier-league?ev_oc_grp_ids=3903'
+url <- 'http://sports.williamhill.com/bet/en-gb/betting/g/348/Anytime+Goalscorer.html'
 
 # Get anytime goalscorer odds
-result <- getOdds(url)
+result <- getOdds(url, teams)
 
 # See the results
 View(arrange(result, desc(probability)))
 
 # -------------------------- Score a brace -------------------------------
 
-url <- 'http://www.paddypower.com/football/football-matches/premier-league?ev_oc_grp_ids=15836'
-result2 <- getOdds(url) %>%
+url <- 'http://sports.williamhill.com/bet/en-gb/betting/g/135015/Player+To+Score+2+Or+More.html'
+result2 <- getOdds(url, teams) %>%
   rename(probBrace = probability)
 
 # -------------------------- Score a hattrick -------------------------------
 
-url <- 'http://www.paddypower.com/football/football-matches/premier-league-matches?ev_oc_grp_ids=13305'
-result3 <- getOdds(url) %>%
+url <- 'http://sports.williamhill.com/bet/en-gb/betting/g/13428/Hat-trick.html'
+result3 <- getOdds(url, teams) %>%
   rename(probHt = probability)
 
 # Merge with other goalscorer data
@@ -35,12 +45,9 @@ result <- result %>%
   inner_join(result2, by = 'player') %>%
   inner_join(result3, by = 'player')
 
-# ----------------- FPL data ---------------
+# ----------------------- Data matching -----------------------
 
-# Get player and team data
-fpldat <- getFPLSummary() %>%
-  mutate('player_name' = paste(first_name, second_name))
-
+# Get player data
 names.split <- do.call(rbind, strsplit(as.character(result$player), ' (?=[^ ]+$)', perl=TRUE)) %>%
   as.data.frame(stringsAsFactors = F) %>%
   rename("first_name" = V1, "second_name" = V2) %>%
@@ -120,24 +127,40 @@ source('./startprob.R')
 
 # ------------------------ Clean sheet data ---------------------
 
-url <- 'http://www.paddypower.com/football/football-matches/premier-league?ev_oc_grp_ids=9551'
+url <- 'http://sports.williamhill.com/bet/en-gb/betting/g/158525/To+Keep+a+Clean+Sheet.html'
 
 webpage <- read_html(url)
 
 #Using CSS selectors to scrap the rankings section
-teams <- html_nodes(webpage,'.odds-label')
+teams_odds <- html_nodes(webpage,'.leftPad')
 
 #Converting the ranking data to text
-teams_data <- html_text(teams)
+teams_data <- html_text(teams_odds)
+
+# Filter out headers
+teams_data <- teams_data[!grepl('To Keep a Clean Sheet', teams_data)]
+teams_data <- grep(paste(teams,collapse="|"), teams_data, value=TRUE)
+teams_data <- gsub('\n\t\t\t\t\t\n\t\t\t\t\t\t',
+             '',
+             teams_data)
+teams_data <- gsub('\n\t\t\t\t\t\n\t\t\t\t',
+             '',
+             teams_data)
 
 #Using CSS selectors to scrape the ods section
-cs_html <- html_nodes(webpage,'.odds-value')
+cs_html <- html_nodes(webpage,'.eventprice')
 
 #Converting the odds data to text
 cs <- html_text(cs_html)
+cs <- gsub('\n\t\t\t\n\t\t\t\n\t\t\t\t\n\t\t\t\t\t',
+             '',
+           cs)
+cs <- gsub('\n\t\t\t\t\n\t\t\t\n\t\t\t\n\t\t',
+             '',
+           cs)
 
 # Replace 'evens' with 1/1, and missing events with 0
-cs <- ifelse(cs == 'evens', '1/1', cs)
+cs <- ifelse(cs == 'EVS', '1/1', cs)
 cs <- ifelse(cs == '1/1000','0',cs)
 
 # Divide odds by odds + 1
@@ -148,11 +171,10 @@ cs.split <- strsplit(cs, split = "/") %>%
   do.call(rbind, .)
 
 # Bind players and odds
-cs <- data.frame('team' = teams_data, 'cs' = cs.split)
+cs <- data.frame('team' = as.character(teams_data), 'cs' = cs.split, stringsAsFactors = F)
 
 # Keep first occurrence of each player (focusing on next gameweek)
 cs <- cs[match(unique(cs$team), cs$team),]
-cs$team <- substr(as.character(cs$team), start = 1, stop = nchar(as.character(cs$team))-1)
 cs$team <- ifelse(cs$team == "Tottenham", "Spurs", cs$team)
 
 # See the results
@@ -207,7 +229,8 @@ fpl.3 %>%
   ungroup %>%
   mutate(goalprob = round(goalprob,2)) %>%
   select(first_name.x, second_name.x, team, now_cost, goalprob, xpap, xgp, xpcs, xpas, xp) %>%
-  mutate_at(5:9, round, digits = 2) %>% View
+  mutate_at(5:9, round, digits = 2) %>%
+  arrange(desc(xp)) %>% View
 
 
 
@@ -215,7 +238,7 @@ fpl.3 %>%
 
 # Get current squad
 #  4880044, 1978879
-myteam.a <- userPicks(user_id = 4880044, gameweek = 26)
+myteam.a <- userPicks(user_id = 4880044, gameweek = 27)
 myteam <- myteam.a %>%
   dplyr::select(position, player_name, price, element) %>%
   mutate(price = price * 10)
@@ -245,7 +268,7 @@ totxp
 # ------------------------ Single transfers -----------------------
 
 # How much in bank? Free transfers?
-bank <- 10
+bank <- 3
 ft <- 1
 
 # Single transfers
@@ -255,7 +278,8 @@ myteam2 %>%
          now_cost < price + bank,
          !id %in% myteam2$element) %>%
   mutate(xpdiff = xp.y - xp.x - ifelse(ft > 0, 0, 4)) %>%
-  arrange(desc(xpdiff)) %>% View
+  arrange(desc(xpdiff)) %>%
+  filter(team.x != 'Man City') %>% View
 
 # ------------------------ Double transfers -----------------------
 
@@ -315,8 +339,8 @@ View(double_transfers)
 # --------- Single transfers ------
 
 # Choose transfers out and in
-trans_out <- c(199)
-trans_in <- c(280)
+trans_out <- c(106)
+trans_in <- c(414)
 
 # Get team
 myteam_1trans <- transfers(myteam2, fpl.3, trans_in, trans_out)
