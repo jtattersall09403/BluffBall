@@ -118,13 +118,6 @@ fpl <- rbind(as.data.frame(dedup), as.data.frame(keepers)) %>%
   mutate(goalprob1 = goalprob - probBrace - probHt)
 
 
-# ------------------------ Predict likelihood of playing 60 minutes ------------------------
-
-# And get historic data for each player
-
-source('./startprob.R')
-
-
 # ------------------------ Clean sheet data ---------------------
 
 url <- 'http://sports.williamhill.com/bet/en-gb/betting/g/158525/To+Keep+a+Clean+Sheet.html'
@@ -141,11 +134,11 @@ teams_data <- html_text(teams_odds)
 teams_data <- teams_data[!grepl('To Keep a Clean Sheet', teams_data)]
 teams_data <- grep(paste(teams,collapse="|"), teams_data, value=TRUE)
 teams_data <- gsub('\n\t\t\t\t\t\n\t\t\t\t\t\t',
-             '',
-             teams_data)
+                   '',
+                   teams_data)
 teams_data <- gsub('\n\t\t\t\t\t\n\t\t\t\t',
-             '',
-             teams_data)
+                   '',
+                   teams_data)
 
 #Using CSS selectors to scrape the ods section
 cs_html <- html_nodes(webpage,'.eventprice')
@@ -153,10 +146,10 @@ cs_html <- html_nodes(webpage,'.eventprice')
 #Converting the odds data to text
 cs <- html_text(cs_html)
 cs <- gsub('\n\t\t\t\n\t\t\t\n\t\t\t\t\n\t\t\t\t\t',
-             '',
+           '',
            cs)
 cs <- gsub('\n\t\t\t\t\n\t\t\t\n\t\t\t\n\t\t',
-             '',
+           '',
            cs)
 
 # Replace 'evens' with 1/1, and missing events with 0
@@ -180,11 +173,19 @@ cs$team <- ifelse(cs$team == "Tottenham", "Spurs", cs$team)
 # See the results
 View(arrange(cs, desc(cs)))
 
+# Match cs odds to fpl data
+fpl <- fpl %>%
+  left_join(cs, by = 'team')
+
+# ------------------------ Predict likelihood of playing 60 minutes ------------------------
+
+# And get historic data for each player
+
+source('./startprob.R')
+
+
 # ------------------- Expected points -----------------
 
-# Match cs odds to fpl data
-fpl.2 <- fpl.1 %>%
-  left_join(cs, by = 'team')
 
 # Check how many have odds available
 print(c(paste0(100*round(sum(!is.na(fpl.2$goalprob))/nrow(fpl.2[fpl.2$pos != 'Goalkeeper',]),3), '% of players have goalscorer odds'),
