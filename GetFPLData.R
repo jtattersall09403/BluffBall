@@ -65,6 +65,22 @@ legal <- function(team) {
   return(result)
 }
 
+# Squad legality
+squadlegal <- function(team) {
+  
+  # Initialise result
+  result <- TRUE
+  
+  # Count players in each position
+  team2 <- team %>%
+    group_by(team) %>%
+    summarise(num = n())
+    
+  if (max(team2$num) > 3) result <- FALSE
+  
+  return(result)
+}
+
 # ----------------------- Subsitution optimisation --------------------
 
 getBestTeam <- function (myteam2){

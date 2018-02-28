@@ -245,5 +245,8 @@ fplsquad <- fpl.3 %>%
          second_name.x.y,
          pos, price, xp)
 
+# Get dreamteam
+source('./Dreamteam/Dreamteam - recursive.R')
+
 # Save everything for shinyApp
 save.image()
