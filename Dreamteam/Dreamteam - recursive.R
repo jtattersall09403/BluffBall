@@ -110,14 +110,17 @@ while (nrow(t.1) > 0) {
 dt.2 <- dt.1 %>%
   group_by(pos) %>%
   mutate(rank = row_number()) %>%
-  mutate(position = ifelse((pos == 'Goalkeeper' | pos == 'Forward') & rank > 1, 12, as.integer(pos)),
+  mutate(position = ifelse(((pos == 'Goalkeeper' | pos == 'Forward') & rank > 1) |
+                             (pos == 'Midfielder' & rank == 5), 12, as.integer(pos)),
          captain = 0) %>%
   arrange(position) %>%
   rename(element = id)
 
 first11 <- getBestTeam(dt.2) %>% select(-order, -position)
 
-dt.3 <- rbind(first11, select(filter(dt.2, !element %in% first11$element), element, pos, team, web_name, now_cost, xp, rank, captain))
+dt.3 <- rbind(first11, select(filter(dt.2, !element %in% first11$element), element, pos, team, web_name, now_cost, xp, rank, captain)) %>%
+  mutate(web_name = ifelse(captain ==1, paste0(web_name, ' (C)'), web_name),
+         xp = ifelse(captain == 1, round(xp * 2,1), round(xp,1)))
 
 # ---------- Results ----------
 View(dt.3)
@@ -127,6 +130,6 @@ bank
 sum(dt.3$xp)
 
 # Total xp
-dt.3.xp <- dt.3[1:11,] %>% mutate(xp = ifelse(captain == 1, xp *2, xp)) %>% ungroup %>% summarise(xp = sum(xp)) %>% unlist
+dt.3.xp <- sum(dt.3[1:11,'xp'])
 dt.3.xp
 

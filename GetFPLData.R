@@ -84,6 +84,7 @@ squadlegal <- function(team) {
 # ----------------------- Subsitution optimisation --------------------
 
 getBestTeam <- function (myteam2){
+  
     # Get ids of first team and subs  
     first <- myteam2[myteam2$position <= 11,]
     subs <- myteam2[myteam2$position > 11,]
@@ -91,7 +92,7 @@ getBestTeam <- function (myteam2){
     # Get first team players with xp less than at least one sub
     subs_potential <- first %>%
       arrange(xp) %>%
-      slice(1:3) %>%
+      slice(1:4) %>%
       filter(xp < max(subs$xp))
     first2 <- first[!first$element %in% subs_potential$element,]
     

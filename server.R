@@ -76,7 +76,9 @@ shinyServer(function(input, output) {
   # Display team table
   output$myteam_tab <- DT::renderDataTable({
     
-    myteam2() %>%
+    myteam2 <- myteam2()
+    myteam2 %>%
+      mutate(xp = ifelse(xp == max(myteam2$xp), xp *2, xp)) %>%
       mutate(cs = format(round(100*cs, 1), nsmall = 1),
              goalprob = format(round(100*goalprob, 1), nsmall = 1),
              xp = format(round(xp, 1), nsmall = 1)) %>%
@@ -126,7 +128,11 @@ shinyServer(function(input, output) {
   
   # Display team as formation
   output$first_team <- renderPlot({
-    teamvis(myteam3())
+    myteam3() %>%
+      ungroup %>%
+      mutate(xp = ifelse(captain == 1, xp * 2, xp)) %>%
+      mutate(player_name = ifelse(captain == 1, paste0(player_name, " (C)"), player_name)) %>%
+      teamvis()
   })
   
   # Get current team total xp
@@ -239,6 +245,29 @@ shinyServer(function(input, output) {
              'New xp' = round(xp.y,1),
              'Difference' = round(xpdiff,1)) %>%
       select(`Transfer out`, `Original xp`, `Transfer in`, `New xp`, `Difference`)
+  })
+  
+  # Display dream team in table
+  output$dreamteam <- DT::renderDataTable({
+    dt.3 %>%
+      select(-rank, -captain)
+  }, options = list(pageLength = 11))
+  
+  # Display dreamteam on pitch
+  output$dreamteam_vis <- renderPlot({
+    dt.3 %>%
+      rename(player_name = web_name) %>%
+      teamvis
+  })
+  
+  # Get dreamteam xp
+  output$dtxp <- renderText({
+    paste(sum(dt.3[1:11,'xp']))
+  })
+  
+  # Get dreamteam cost
+  output$dtcost <- renderText({
+    paste0('£', sum(dt.3[,'now_cost'])/10, ' million')
   })
   
   

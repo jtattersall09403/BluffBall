@@ -18,7 +18,8 @@ shinyUI(dashboardPage(skin = 'green',
     sidebarMenu(
       menuItem("Latest odds", tabName = "odds", icon = icon("dashboard")),
       menuItem("Rate my team", tabName = "team", icon = icon("th")),
-      menuItem("Recommended transfers", tabName = "trans", icon = icon("cog"))
+      menuItem("Recommended transfers", tabName = "trans", icon = icon("cog")),
+      menuItem("Dreamteam", tabName = "dt", icon = icon("far fa-star"))
     )
   ),
   
@@ -118,11 +119,35 @@ shinyUI(dashboardPage(skin = 'green',
                     DT::dataTableOutput('double_trans')
                     )
               )
-      )
+      ),
+      tabItem(tabName = 'dt',
+              h2("BluffBall's affordable dreamteam for the next gameweek"),
+              fluidRow(
+                box(width = 6,
+                  title = 'Expected points',
+                  solidHeader = T,
+                  status = 'success',
+                  h1(textOutput('dtxp'))),
+              box(width = 6,
+                  title = 'Total cost',
+                  solidHeader = T,
+                  status = 'success',
+                  h1(textOutput('dtcost')))
+              ),
+              fluidRow(
+                box(width = 6,
+                    title = 'Dreamteam',
+                    status = 'primary',
+                    DT::dataTableOutput('dreamteam')),
+                box(width = 6,
+                    title = '',
+                    status = 'primary',
+                    plotOutput('dreamteam_vis'))
+              )
     )
 
     
   )
 
   
-))
+)))
