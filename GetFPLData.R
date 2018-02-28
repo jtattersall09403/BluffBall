@@ -168,3 +168,40 @@ pointssim <- function(x, teamdetails) {
   return(p)
 }
 
+
+# Define function to draw team formation
+teamvis <- function(myteam2) {
+  
+  myteam2[1:11,] %>%
+    group_by(pos) %>%
+    mutate(rank = row_number()) %>%
+    mutate(av = mean(rank)) %>%
+    mutate(x = 2*(rank-av) + 5,
+           y = (as.integer(pos)-1)*-10,
+           xp = format(round(xp, 1), nsmall = 1)) %>%
+    ggplot(aes(x=x, y=y)) +
+    geom_segment(x = 0, y = -15, xend = 10, yend = -15, color = 'white') +
+    geom_segment(x = 0, y = -32, xend = 10, yend = -32, color = 'white') +
+    geom_segment(x = 0, y = 0, xend = 0, yend = -32, color = 'white') +
+    geom_segment(x = 10, y = 0, xend = 10, yend = -32, color = 'white') +
+    geom_segment(x = 0, y = 0, xend = 10, yend = -0, color = 'white') +
+    geom_segment(x = 3, y = -3, xend = 7, yend = -3, color = 'white') +
+    geom_segment(x = 3, y = -0, xend = 3, yend = -3, color = 'white') +
+    geom_segment(x = 7, y = -0, xend = 7, yend = -3, color = 'white') +
+    geom_point(color = 'red4', size = 5) +
+    geom_text(aes(label=paste0(player_name, '\n(', xp, ')')),vjust=-0.5) +
+    expand_limits(y = c(3,-33), x = c(-0.5,10.5)) +
+    theme(axis.line=element_blank(),
+          axis.text.x=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank(),
+          legend.position="none",
+          panel.background = element_blank(),
+          panel.grid.major=element_blank(),
+          panel.grid.minor=element_blank(),
+          plot.background=element_rect(fill = 'palegreen3'))
+  
+}
+

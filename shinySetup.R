@@ -1,3 +1,5 @@
+# Shiny setup
+
 library(rvest)
 library(dplyr)
 library(fastLink)
@@ -88,8 +90,8 @@ left[a, 'matchindex'] <- b
 namesmatched <- cbind(names.split[b,],"matchindex"=b, "match"=matches.out$posterior)
 
 matched.data <- left_join(left,
-                      namesmatched,
-                      by="matchindex")
+                          namesmatched,
+                          by="matchindex")
 
 # Keep most likely match for each
 dedup <- matched.data %>%
@@ -226,83 +228,6 @@ fpl.3 <- fpl.2 %>%
          xpas = prob60 * probas * 3) %>%
   mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs, ifelse(is.na(xpas),0,xpas))
 
-fpl.3 %>%
-  ungroup %>%
-  mutate(goalprob = round(goalprob,2)) %>%
-  select(first_name.x, second_name.x, team, now_cost, goalprob, xpap, xgp, xpcs, xpas, xp) %>%
-  mutate_at(5:9, round, digits = 2) %>%
-  arrange(desc(xp)) %>% View
-
-
-
-# ------------------------ Current team -----------------------
-
-# Get current squad
-#  4880044, 1978879
-myteam.a <- userPicks(user_id = 4880044, gameweek = 27)
-myteam <- myteam.a %>%
-  dplyr::select(position, player_name, price, element) %>%
-  mutate(price = price * 10)
-
-# Link expected points
-myteam2 <- myteam %>%
-  left_join(select(fpl.3, id, first_name.x, web_name, pos, team, goalprob, xp), by = c('element'='id')) %>%
-  group_by(player_name) %>%
-  mutate(rank = rank(desc(xp), ties.method='first')) %>%
-  mutate(position = as.numeric(position),
-         price = as.numeric(price)) %>%
-  filter(rank == 1) %>%
-  select(-rank) %>%
-  arrange(position)
-
-View(arrange(myteam2, position))
-
-#  ---------------------------------- Pick best team ----------------------------------
-
-myteam3 <- getBestTeam(myteam2)
-
-View(myteam3)
-
-# Total xp
-totxp <- myteam3 %>% mutate(xp = ifelse(captain == 1, xp *2, xp)) %>% ungroup %>% summarise(xp = sum(xp)) %>% unlist
-totxp
-
-# ------------------------ Single transfers -----------------------
-
-# How much in bank? Free transfers?
-bank <- 3
-ft <- 1
-
-# Single transfers
-myteam2 %>%
-  inner_join(select(fpl.3, id, web_name, pos, now_cost, team, goalprob, xp), by = c('pos' = 'pos')) %>%
-  filter(xp.y > xp.x,
-         now_cost < price + bank,
-         !id %in% myteam2$element) %>%
-  mutate(xpdiff = xp.y - xp.x - ifelse(ft > 0, 0, 4)) %>%
-  arrange(desc(xpdiff)) %>%
-  filter(team.x != 'Man City') %>% View
-
-# ------------------------ Double transfers -----------------------
-
-# Get all squad pairs
-myteam2$dum <- 1
-squad <- myteam2 %>%
-  select(dum,  first_name.x, player_name, pos, team, price, xp) %>%
-  inner_join(myteam2, by = 'dum') %>%
-  filter(!(first_name.x.x == first_name.x.y & player_name.x == player_name.y)) %>%
-  mutate(pos = paste(pos.x, pos.y, sep="-"),
-         price = price.x + price.y,
-         xp = xp.x + xp.y) %>%
-  select(first_name.x.x,
-         player_name.x,
-         first_name.x.y,
-         player_name.y,
-         pos, price, xp)
-
-# Remove duplicates
-squad <- squad[!duplicated(data.frame(t(apply(squad[,c(2,4)], 1, sort)), squad$price)),]
-
 # Get all fpl pairs
 fpl.3$dum <- 1
 fplsquad <- fpl.3 %>%
@@ -320,78 +245,5 @@ fplsquad <- fpl.3 %>%
          second_name.x.y,
          pos, price, xp)
 
-# Join squad pairs to fpl pairs
-double_transfers <- inner_join(squad, fplsquad, by = 'pos') %>%
-  mutate(xpdiff = xp.y - xp.x - ifelse(ft > 1, 0, ifelse(ft == 1, 4, 8))) %>%
-  filter(price.x + bank >= price.y,
-         !id.x %in% myteam2$element,
-         !id.y %in% myteam2$element) %>%
-  group_by(pos) %>%
-  mutate(rank = rank(desc(xpdiff), ties.method = 'first')) %>%
-  filter(rank <= 5) %>%
-  arrange(desc(xpdiff))
-
-# Remove duplicates
-double_transfers <- double_transfers[!duplicated(data.frame(t(apply(double_transfers[,c('second_name.x.x','second_name.x.y')], 1, sort)), double_transfers$price.x)),]
-
-View(double_transfers)
-
-# ------------------------ Expected points after transfer(s) --------
-
-# --------- Single transfers ------
-
-# Choose transfers out and in
-trans_out <- c(106)
-trans_in <- c(414)
-
-# Get team
-myteam_1trans <- transfers(myteam2, fpl.3, trans_in, trans_out)
-
-# Total xp
-totxp <- myteam_1trans %>% mutate(xp = ifelse(captain == 1, xp *2, xp)) %>% ungroup %>% summarise(xp = sum(xp)) %>%
-  mutate(xp = xp - (length(trans_out)-ft)*4) %>% 
-  unlist
-totxp
-
-# --------- Double transfer -------
-
-# Choose transfers out and in
-trans_out <- c(199, 100)
-trans_in <- c(104, 357)
-
-# Get team
-myteam_2trans <- transfers(myteam2, fpl.3, trans_in, trans_out)
-
-# Total xp
-totxp <- myteam_2trans %>% mutate(xp = ifelse(captain == 1, xp *2, xp)) %>% ungroup %>% summarise(xp = sum(xp)) %>%
-  mutate(xp = xp - (length(trans_out)-ft)*4) %>% 
-  unlist
-totxp
-
-# ------------------------ Points simulations -----------------------
-
-# Full team details
-teamdetails <- inner_join(myteam3, fpl.3, by = c('element'='id'))
-
-# Simulate points for each player
-teamsim <- lapply(teamdetails$element, pointssim, teamdetails) %>%
-  do.call(cbind, .)
-
-# Get total team points
-teamsimpoints <- teamsim %>%
-  rowSums() %>%
-  as.data.frame %>%
-  rename(points = '.')
-
-# Visualise probabilities
-teamsimpoints %>%
-  ggplot(aes(x=points)) +
-  geom_histogram(fill = 'dodgerblue3', color = 'dodgerblue4', bins = 30)
-
-# Stats
-mean(teamsimpoints$points)
-percentile = ecdf(teamsimpoints$points)
-
-# Use the below to see likelihood of achieving a certain score or higher
-(1-percentile(50))*100
-quantile(teamsimpoints$points)
+# Save everything for shinyApp
+save.image()
