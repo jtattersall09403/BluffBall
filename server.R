@@ -262,7 +262,7 @@ shinyServer(function(input, output) {
   
   # Get dreamteam xp
   output$dtxp <- renderText({
-    paste(sum(dt.3[1:11,'xp']))
+    paste(round(sum(dt.3[1:11,'xp']), 0))
   })
   
   # Get dreamteam cost

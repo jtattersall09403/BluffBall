@@ -63,7 +63,7 @@ t.1 <- dt.1 %>%
   ungroup %>%
   inner_join(select(fpl.3, id, team, web_name, pos, now_cost, xp), by = 'pos') %>%
   filter(!id.y %in% dt.1$id,
-         !team.y %in% t.i) %>%
+         !team.y %in% t.i$team) %>%
   mutate(pricediff = now_cost.x - now_cost.y,
          xpdiff = xp.x - xp.y) %>%
   filter(pricediff + bank > 0,
@@ -94,7 +94,7 @@ while (nrow(t.1) > 0) {
     ungroup %>%
     inner_join(select(fpl.3, id, team, web_name, pos, now_cost, xp), by = 'pos') %>%
     filter(!id.y %in% dt.1$id,
-           !team.y %in% t.i) %>%
+           !team.y %in% t.i$team) %>%
     mutate(pricediff = now_cost.x - now_cost.y,
            xpdiff = xp.x - xp.y) %>%
     filter(pricediff + bank > 0,
