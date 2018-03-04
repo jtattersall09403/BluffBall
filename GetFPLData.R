@@ -71,7 +71,7 @@ squadlegal <- function(team) {
   # Initialise result
   result <- TRUE
   
-  # Count players in each position
+  # Count players in each team
   team2 <- team %>%
     group_by(team) %>%
     summarise(num = n())
@@ -195,19 +195,39 @@ teamvis <- function(myteam2) {
     mutate(av = mean(rank)) %>%
     mutate(x = 2*(rank-av) + 5,
            y = (as.integer(pos)-1)*-10,
-           xp = format(round(xp, 1), nsmall = 1)) %>%
+           xp = prettyNum(round(xp, 2), digits = 2)) %>%
     ggplot(aes(x=x, y=y)) +
-    geom_segment(x = 0, y = -15, xend = 10, yend = -15, color = 'white') +
-    geom_segment(x = 0, y = -32, xend = 10, yend = -32, color = 'white') +
-    geom_segment(x = 0, y = 0, xend = 0, yend = -32, color = 'white') +
-    geom_segment(x = 10, y = 0, xend = 10, yend = -32, color = 'white') +
+    geom_segment(x = 0, y = -16.5, xend = 10, yend = -16.5, color = 'white') +
+    geom_segment(x = 0, y = -35, xend = 10, yend = -35, color = 'white') +
+    geom_segment(x = 0, y = 0, xend = 0, yend = -35, color = 'white') +
+    geom_segment(x = 10, y = 0, xend = 10, yend = -35, color = 'white') +
     geom_segment(x = 0, y = 0, xend = 10, yend = -0, color = 'white') +
-    geom_segment(x = 3, y = -3, xend = 7, yend = -3, color = 'white') +
-    geom_segment(x = 3, y = -0, xend = 3, yend = -3, color = 'white') +
-    geom_segment(x = 7, y = -0, xend = 7, yend = -3, color = 'white') +
-    geom_point(color = 'red4', size = 5) +
-    geom_text(aes(label=paste0(player_name, '\n(', xp, ')')),vjust=-0.5) +
-    expand_limits(y = c(3,-33), x = c(-0.5,10.5)) +
+    geom_segment(x = 3, y = -5, xend = 7, yend = -5, color = 'white') +
+    geom_segment(x = 3, y = -0, xend = 3, yend = -5, color = 'white') +
+    geom_segment(x = 7, y = -0, xend = 7, yend = -5, color = 'white') +
+    geom_point(aes(colour = team), size = 7) +
+    scale_colour_manual(name = 'team', values = c("Arsenal"="red1",
+                                                  "Bournemouth"="red4",
+                                                  "Brighton"="deepskyblue",
+                                                  "Burnley"="deeppink4",
+                                                  "Chelsea"="blue3",
+                                                  "Crystal Palace"="blue",
+                                                  "Everton"="navy",
+                                                  "Huddersfield"="skyblue2",
+                                                  "Leicester"="dodgerblue4",
+                                                  "Liverpool"="red3",
+                                                  "Man City"="skyblue1",
+                                                  "Man Utd"="red2",
+                                                  "Newcastle"="grey19",
+                                                  "Southampton"="firebrick1",
+                                                  "Stoke"="red",
+                                                  "Swansea"="oldlace",
+                                                  "Spurs"="white",
+                                                  "Watford"="gold",
+                                                  "West Brom"="navyblue",
+                                                  "West Ham"="firebrick4"))+
+    geom_text(aes(label=paste0(player_name, '\n(', xp, ')')),vjust=1.5) +
+    expand_limits(y = c(3,-37), x = c(-0.5,10.5)) +
     theme(axis.line=element_blank(),
           axis.text.x=element_blank(),
           axis.text.y=element_blank(),
@@ -221,4 +241,5 @@ teamvis <- function(myteam2) {
           plot.background=element_rect(fill = 'palegreen3'))
   
 }
+
 

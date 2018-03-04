@@ -12,12 +12,16 @@ library(DT)
 library(ggplot2)
 library(plotly)
 library(ggforce)
-
-source('GetFPLData.R')
-source('getOdds.R')
+library(Cairo)
+options(shiny.usecairo=T, digits = 2)
 
 # Pick up previous data
-load('.Rdata')
+load('.RData')
+strformat <- "function( nRow, aData) {ind = 2; $('td:eq('+ind+')', nRow).html( parseFloat(aData[ind]).toFixed(2) );}"
+
+# Get functions
+source('GetFPLData.R')
+source('getOdds.R')
 
 # Define server logic
 shinyServer(function(input, output) {
@@ -26,35 +30,87 @@ shinyServer(function(input, output) {
   output$goalscorer_tab <- DT::renderDataTable({
     
     # Create table
-    table <- fpl %>%
-      mutate(goalprob = format(round(100*goalprob, 1), digits = 2)) %>%
-      select('Player' = web_name, 'Probability of scoring (%)' = goalprob) %>%
-      arrange(desc(`Probability of scoring (%)`))
+    fpl %>%
+      filter(!is.na(goalprob)) %>%
+      arrange(desc(goalprob)) %>%
+      mutate(goalprob = round(100*goalprob, 1)) %>%
+      select('Player' = web_name, 'Probability of scoring (%)' = goalprob)
     
-  }, options = list(pageLength = 10))
+  }, options = list(pageLength = 10, scrollX = TRUE))
   
   
-  # Create goalscorer odds table
+  # Create clean sheet odds table
   output$cs_tab <- DT::renderDataTable({
     
     # Create table
-    table <- fpl %>%
-      mutate(cs = format(round(100*cs, 1), nsmall = 1)) %>%
+    fpl %>%
+      arrange(desc(cs)) %>%
+      mutate(cs = round(100*cs, 1)) %>%
       select('Team' = team, 'Clean sheet probability (%)' = cs) %>%
-      unique %>%
-      arrange(desc(`Clean sheet probability (%)`))
+      unique
     
-  }, options = list(pageLength = 10))
+  }, options = list(pageLength = 10, scrollX = TRUE))
   
+  # Players with no odds
+  output$no_odds <- DT::renderDataTable({
+    fpl.3 %>%
+      filter((is.na(goalprob) |
+             is.na(cs)),
+             news == '',
+             prob60 > 0.1) %>%
+      arrange(desc(total_points)) %>%
+      mutate(goalprob = round(100*goalprob, 0),
+             cs = round(100*cs, 0)) %>%
+      select('Player' = web_name,
+             'Team' = team,
+             'Position' = pos,
+             'Team' = team,
+             'Total fpl points' = total_points)
+  })
+  
+  # All point projections
+  output$point_projections <- DT::renderDataTable({
+    
+    # Show which players don't have odds
+    showModal(modalDialog(
+      title = "Odds missing",
+      h2("Players with odds unavailable"),
+      p("The bookies haven't published odds yet for the players below. Depending on how good these players are, ",
+        "this may affect the quality of BluffBall's recommendations."),
+      DT::dataTableOutput('no_odds'),
+      easyClose = TRUE,
+      footer = modalButton("Dismiss")
+    ))
+    
+    # Create table
+    fpl.3 %>%
+      arrange(desc(xp)) %>%
+      mutate(xp = round(xp, 1),
+             goalprob = round(100*goalprob, 0),
+             cs = round(100*cs, 0),
+             prob60 = round(100*prob60,0),
+             now_cost = now_cost/10) %>%
+      select('Name' = web_name,
+             'Position' = pos,
+             'Team' = team,
+             'Price' = now_cost,
+             'Goal (%)' = goalprob,
+             'Clean sheet (%)' = cs,
+             'Probability playing 60+ mins (%)' = prob60,
+             'Expected points' = xp)
+    
+  }, options = list(pageLength = 50, scrollX = TRUE))
+  
+  # ------------------------ Current team -----------------------
   # Get current team
   myteam2 <- eventReactive(input$import_team, {
-    # ------------------------ Current team -----------------------
     
     showNotification('Downloading current team...')
     
     # Get current squad
     #  4880044, 1978879
-    myteam.a <- userPicks(user_id = input$teamid, gameweek = as.integer(input$gw))
+    teamid <- substr(input$teamid, 34, 40)
+    myteam.a <- userPicks(user_id = teamid, gameweek = as.integer(input$gw))
     myteam <- myteam.a %>%
       dplyr::select(position, player_name, price, element) %>%
       mutate(price = price * 10)
@@ -79,9 +135,10 @@ shinyServer(function(input, output) {
     myteam2 <- myteam2()
     myteam2 %>%
       mutate(xp = ifelse(xp == max(myteam2$xp), xp *2, xp)) %>%
-      mutate(cs = format(round(100*cs, 1), nsmall = 1),
-             goalprob = format(round(100*goalprob, 1), nsmall = 1),
-             xp = format(round(xp, 1), nsmall = 1)) %>%
+      mutate(cs = round(100*cs, 1),
+             goalprob = round(100*goalprob, 1),
+             xp = round(xp, 1),
+             price = price/10) %>%
       select("Player" = player_name,
              "Team" = team,
              "Position" = pos,
@@ -90,11 +147,16 @@ shinyServer(function(input, output) {
              "Goal (%)" = goalprob,
              "Expected points" = xp)
     
-  }, options = list(pageLength = 11))
+  }, options = list(pageLength = 11, scrollX = TRUE))
   
   # Display team as formation
   output$current_team <- renderPlot({
-    teamvis(myteam2())
+    myteam2 <- myteam2()
+    myteam2 %>%
+      ungroup %>%
+      mutate(player_name = ifelse(xp == max(myteam2$xp), paste(player_name, '(C)'), player_name),
+             xp = ifelse(xp == max(myteam2$xp), xp * 2, xp)) %>%
+      teamvis()
   })
   
   # Get best possible team
@@ -112,9 +174,10 @@ shinyServer(function(input, output) {
     myteam3() %>%
       ungroup %>%
       mutate(xp = ifelse(captain == 1, xp * 2, xp)) %>%
-      mutate(cs = format(round(100*cs, 1), nsmall = 1),
-             goalprob = format(round(100*goalprob, 1), nsmall = 1),
-             xp = format(round(xp, 1), nsmall = 1),
+      mutate(cs = round(100*cs, 1),
+             goalprob = round(100*goalprob, 1),
+             xp = round(xp, 1),
+             price = price/10,
              player_name = ifelse(captain == 1, paste0(player_name, " (C)"), player_name)) %>%
       select("Player" = player_name,
              "Team" = team,
@@ -124,7 +187,7 @@ shinyServer(function(input, output) {
              "Goal (%)" = goalprob,
              "Expected points" = xp)
       
-  }, options = list(pageLength = 11))
+  }, options = list(pageLength = 11, scrollX = TRUE))
   
   # Display team as formation
   output$first_team <- renderPlot({
@@ -154,6 +217,7 @@ shinyServer(function(input, output) {
     
   })
   
+  # ------------------------ Transfers -----------------------
   
   # Get single transfers
   single_trans <- eventReactive(input$optimise, {
@@ -162,7 +226,7 @@ shinyServer(function(input, output) {
     single_trans <- myteam2 %>%
       inner_join(select(fpl.3, id, web_name, pos, now_cost, team, goalprob, xp), by = c('pos' = 'pos')) %>%
       filter(xp.y > xp.x,
-             now_cost < price + input$bank,
+             now_cost < price + input$bank*10,
              !id %in% myteam2$element) %>%
       mutate(xpdiff = xp.y - xp.x - ifelse(input$ft > 0, 0, 4)) %>%
       arrange(desc(xpdiff))
@@ -184,8 +248,9 @@ shinyServer(function(input, output) {
              'Original xp' = round(xp.x,1),
              'Transfer in' = web_name.y,
              'New xp' = round(xp.y,1),
-             'Difference' = round(xpdiff,1)) %>%
-      select(`Transfer out`, `Original xp`, `Transfer in`, `New xp`, `Difference`)
+             'Difference' = round(xpdiff,1),
+             'Price difference' = (now_cost-price)/10) %>%
+      select(`Transfer out`, `Original xp`, `Transfer in`, `New xp`, `Difference`, `Price difference`)
     })
   
   # Get double transfers
@@ -214,7 +279,7 @@ shinyServer(function(input, output) {
     # Join squad pairs to fpl pairs
     double_transfers <- inner_join(squad, fplsquad, by = 'pos') %>%
       mutate(xpdiff = xp.y - xp.x - (8-(4*(input$ft)))) %>%
-      filter(price.x + bank >= price.y,
+      filter(price.x + input$bank*10 >= price.y,
              !id.x %in% myteam2$element,
              !id.y %in% myteam2$element) %>%
       group_by(pos) %>%
@@ -247,11 +312,182 @@ shinyServer(function(input, output) {
       select(`Transfer out`, `Original xp`, `Transfer in`, `New xp`, `Difference`)
   })
   
+  # ------------------------ Making transfers -----------------
+  
+  # Display current squad so you can select who to transfer out
+  output$currentsquad <- renderDT({
+    myteam2 <- myteam2()
+    myteam2 %>%
+      as.data.frame %>%
+      mutate(xp = round(xp,2),
+             price = price/10) %>%
+      select('Player' = player_name,
+             'Team' = team,
+             'Position' = pos,
+             'Price' = price,
+             'Xp' = xp)
+    
+  }, options = list(pageLength = 15, scrollX = TRUE))
+  
+  # Get reactive bank values
+  bankval <- reactive({
+    input$bank + sum(unlist(myteam2()[input$currentsquad_rows_selected, 'price']))/10
+  })
+  
+  # Display bank value
+  output$bankval <- renderText({
+    b <- bankval() - sum(unlist(player_pool()[input$playerpool_rows_selected, 'now_cost']))
+    paste0('£', round(b,1), 'm')
+  })
+  
+  # Get ineligible teams
+  teams.full <- reactive({
+    
+    if(!is.null(input$currentsquad_rows_selected)) {
+      myteam2()[-input$currentsquad_rows_selected,] %>%
+        group_by(team) %>%
+        summarise(num = n()) %>%
+        filter(num > 2) %>%
+        select(team) %>%
+        unlist
+    } else {
+      paste('Empty')
+    }
+      
+    
+  })
+  
+  # Get player pool
+  player_pool <- reactive({
+    
+    # Current squad and bank
+    myteam2 <- myteam2()
+    teams.full <- teams.full()
+    bank <- bankval()
+    
+    # Get rows selected in transfer_out table
+    rws = input$currentsquad_rows_selected
+    
+    # Filter data
+    fpl.3 %>%
+      as.data.frame %>%
+      mutate(now_cost = now_cost/10) %>%
+      filter(pos %in% unlist(myteam2[rws,'pos']),
+             !team %in% teams.full,
+             now_cost <= bank) %>%
+      arrange(desc(xp))
+  })
+  
+  # Display potential transfers in
+  output$playerpool <- DT::renderDataTable({
+    
+    # Display potential transfers in same position
+    player_pool() %>%
+      mutate(xp = round(xp,2)) %>%
+      select('Player' = player_name,
+             'Team' = team,
+             'Position' = pos,
+             'Price' = now_cost,
+             'Xp' = xp)
+    
+  }, options = list(pageLength = 15, scrollX = TRUE))
+  
+  # Get new team
+  newteam <- eventReactive(input$transfers, {
+    
+    myteam2 <- myteam2()
+    player_pool <- player_pool()
+    trans_out <- unlist(myteam2[input$currentsquad_rows_selected,'element'])
+    trans_in <- unlist(player_pool[input$playerpool_rows_selected, 'id'])
+      
+    # Ids after transfers
+    new_ids <- append(myteam2$element[!myteam2$element %in% trans_out], trans_in)
+    
+    # Get team after transfers
+    newteam <- fpl.3[fpl.3$id %in% new_ids,] %>%
+      mutate(position = row_number(), 'player_name'= web_name) %>%
+      select(position, player_name, 'price' = now_cost, id, first_name.x, web_name, pos, team, goalprob, xp)
+    
+    return(newteam)
+  })
+  
+  # Get new first 11
+  newfirst11 <- reactive({
+    
+    # Get new team and bank
+    newteam <- newteam()
+    myteam2 <- myteam2()
+    
+    b <- sum(myteam2$price) + input$bank * 10 - sum(newteam$price)
+    
+    # Check players in each position
+    team2 <- newteam %>%
+      group_by(pos) %>%
+      summarise(num = n()) %>%
+      dcast( . ~ pos, value.var = 'num')
+    
+    # Check all positions present
+    legal <- TRUE
+    if (sum(points$pos %in% names(team2)) == 4) {
+      
+      # Check correct number in each position
+      if (team2$Goalkeeper != 2 |
+          team2$Defender != 5 |
+          team2$Midfielder != 5 |
+          team2$Forward != 3) {legal <- FALSE}
+      
+    } else {
+      legal <- FALSE 
+    }
+    
+    if(squadlegal(newteam) & b >= 0 & legal == TRUE) {
+      
+      # Get best team
+      newteam %>% rename(element = id) %>% getBestTeam() %>%
+        mutate(xp = ifelse(captain == 1, xp * 2, xp),
+               player_name = ifelse(captain == 1, paste(player_name, '(C)'), player_name))
+      
+    } else {
+      # Display error message
+      showModal(modalDialog(
+        title = "Invalid team selected",
+        p("The squad you've chosen is too expensive, contains the wrong number of players in each position, or has too many players from a single team.",
+          "Select different players to transfer in and try again."),
+        easyClose = TRUE,
+        footer = modalButton("Dismiss")
+      ))
+      
+      NULL
+    }
+  })
+  
+  # Display new team
+  output$newteamplot <- renderPlot({
+    
+    newfirst11 <- newfirst11()
+    
+    if (!is.null(newfirst11)) {
+      teamvis(newfirst11)
+    } else {
+      ggplot()
+    }
+
+    
+  })
+  
+  # Display new team xp
+  output$newxp <- renderText(format(round(sum(newfirst11()$xp), 0), nsmall = 0))
+  
+  # Display new team cost
+  output$newcost <- renderText(paste0('£', sum(newteam()$price)/10, 'm'))
+  
+  # ------------------------ Dream team -----------------------
+  
   # Display dream team in table
   output$dreamteam <- DT::renderDataTable({
     dt.3 %>%
       select(-rank, -captain)
-  }, options = list(pageLength = 11))
+  }, options = list(pageLength = 11, scrollX = TRUE))
   
   # Display dreamteam on pitch
   output$dreamteam_vis <- renderPlot({

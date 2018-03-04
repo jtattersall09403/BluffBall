@@ -28,7 +28,7 @@ load('./.RData')
     select(-id, -team, -web_name)
   
   # Save out df for optimisation in python
-  fwrite(mV, '~/Python/dreamteam.csv')
+  #fwrite(mV, '~/Python/dreamteam.csv')
   
   # Get theoretical max xp
   xpmax <- dreamteamdat %>% arrange(desc(xp)) %>% slice(1:15) %>% summarise(n = sum(xp)) %>% unlist

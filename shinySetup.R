@@ -72,7 +72,7 @@ matches.out <- fastLink(
   dfB = right, 
   varnames = c("player_name","web_name", "first_name","second_name"),
   stringdist.match = c("player_name","web_name", "first_name","second_name"), # Specifies the variables you want to treat as strings for fuzzy matching
-  #partial.match = c("web_name", "first_name","second_name"), # Specifes variables where you want the algorithm to check for partial matches
+  #partial.match = c("player_name","web_name", "first_name","second_name"), # Specifes variables where you want the algorithm to check for partial matches
   verbose = T,
   return.all = T
   #threshold.match = .01 # Match probability threshold. The default is .85, and you can play around with different values
@@ -190,6 +190,7 @@ source('./startprob.R')
 
 
 # Check how many have odds available
+fpl.2 <- fpl.1
 print(c(paste0(100*round(sum(!is.na(fpl.2$goalprob))/nrow(fpl.2[fpl.2$pos != 'Goalkeeper',]),3), '% of players have goalscorer odds'),
         paste0(100*round(sum(!is.na(fpl.2$cs))/nrow(fpl.2),3), '% of players have clean sheet odds'),
         paste0(100*round(sum(!is.na(fpl.2$prob60))/nrow(fpl.2),3), '% of players have a playing time prediction')))
@@ -198,7 +199,7 @@ print(c(paste0(100*round(sum(!is.na(fpl.2$goalprob))/nrow(fpl.2[fpl.2$pos != 'Go
 fpl.2 %>%
   filter(pos != 'Goalkeeper', (is.na(goalprob) | is.na(prob60))) %>%
   select(web_name, team, goalprob, prob60) %>%
-  arrange(team) %>% View
+  arrange(desc(prob60)) %>% View
 
 # Match on points lookup
 points <- data.frame('pos' = sort(unique(fpl$pos)),
@@ -248,5 +249,9 @@ fplsquad <- fpl.3 %>%
 # Get dreamteam
 source('./Dreamteam/Dreamteam - recursive.R')
 
+# Set up table format string
+strformat <- "function( nRow, aData) {ind = 2; $('td:eq('+ind+')', nRow).html( parseFloat(aData[ind]).toFixed(2) );}"
+
 # Save everything for shinyApp
 save.image()
+

@@ -1,0 +1,13 @@
+name: BluffBall
+title: BluffBall
+username:
+account: dialjsas-jt
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 290969
+bundleId: 1249449
+url: https://dialjsas-jt.shinyapps.io/BluffBall/
+when: 1520016335.14691
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: dreamteam.csv|team_colors.csv
