@@ -221,15 +221,40 @@ shinyServer(function(input, output) {
   # Get single transfers
   single_trans <- eventReactive(input$optimise, {
     
-    showNotification('Getting transfers team...', duration = 10)
+    showNotification('Getting transfers...', duration = 10)
     
+    # Get data
     myteam2 <- myteam2()
-    single_trans <- myteam2 %>%
+    myteam3 <- myteam3() %>%
+      group_by(pos) %>%
+      mutate(numpos = n()) %>%
+      mutate(minperpos = case_when(pos == 'Goalkeeper' ~ 1,
+                                   pos == 'Defender' ~ 3,
+                                   pos == 'Midfielder' ~ 2,
+                                   pos == 'Forward' ~ 1),
+             minpos = ifelse(numpos == minperpos, 1, 0))
+    
+    # Get number of first team players in each position
+    numpos <- myteam3 %>% select(pos, numpos, minperpos, minpos) %>% unique
+    
+    # Get number of players in each team
+    t.i <- myteam2 %>% group_by(team) %>% summarise(num = n()) %>% filter(num == 3) %>% select(team) %>% unlist
+    
+    # Get optimised squad
+    mysquad <- myteam3 %>%
+      select(-order, -captain) %>%
+      rbind(myteam2[!myteam2$element %in% myteam3$element,])
+    
+    # Get single transfers with biggest impact on first team xp
+    single_trans <- mysquad %>%
+      inner_join(numpos, by = 'pos') %>%
+      mutate(minxp = min(myteam3$xp[myteam3$minpos==0 | myteam3$pos == pos])) %>%
       inner_join(select(fpl.3, id, web_name, pos, now_cost, team, goalprob, xp), by = c('pos' = 'pos')) %>%
+      mutate(xpdiff = ifelse(element %in% myteam3$element, xp.y - xp.x, xp.y - minxp) - ifelse(input$ft > 0, 0, 4)) %>%
       filter(xp.y > xp.x,
              now_cost < price + input$bank*10,
-             !id %in% myteam2$element) %>%
-      mutate(xpdiff = xp.y - xp.x - ifelse(input$ft > 0, 0, 4)) %>%
+             !id %in% myteam2$element,
+             !team.y %in% t.i) %>%
       arrange(desc(xpdiff))
     
     return(single_trans)
@@ -375,7 +400,8 @@ shinyServer(function(input, output) {
       mutate(now_cost = now_cost/10) %>%
       filter(pos %in% unlist(myteam2[rws,'pos']),
              !team %in% teams.full,
-             now_cost <= bank) %>%
+             now_cost <= bank,
+             !id %in% myteam2$element) %>%
       arrange(desc(xp))
   })
   

@@ -104,7 +104,7 @@ getBestTeam <- function (myteam2){
     
     # Get best combination
     xpbest <- 0
-    for (x in 1:ncol(combns)) {
+    lapply(1:ncol(combns), function(x) {
       team = rbind(first2, filter(subs2, element %in% combns[,x]))
       
       if (legal(team)) {
@@ -114,10 +114,12 @@ getBestTeam <- function (myteam2){
       }
       
       if (xp > xpbest) {
-        bestTeam <- team
-        xpbest <- xp
+        bestTeam <<- team
+        xpbest <<- xp
       }
-    }
+      
+      #print(paste('Processed', x, 'of', ncol(combns)))
+    })
     
     
     # Create team

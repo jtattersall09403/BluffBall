@@ -12,9 +12,6 @@ source('./getOdds.R')
 # Pick up previous data
 load('.RData')
 
-# Record previous dreamteam
-dt.last <- dt.3
-
 # ----------------- FPL data ---------------
 
 # Get player and team data
@@ -25,6 +22,13 @@ fpldat <- getFPLSummary() %>%
 teams <- as.character(unique(fpldat$team))
 teams[teams == 'Spurs'] <- 'Tottenham'
 
+# Get last week's dreamteam points
+dt.last <- dt.3 %>%
+  inner_join(select(fpldat, id, event_points), by = c('element'='id')) %>%
+  mutate(event_points = ifelse(captain == 1, event_points * 2, event_points))
+
+# Show total points
+sum(dt.last[1:11,'event_points'])
 
 # -------------------------------------- Goalscorer odds -----------------------
 
@@ -216,10 +220,9 @@ points <- data.frame('pos' = sort(unique(fpl$pos)),
 fpl.3 <- fpl.2 %>%
   ungroup %>%
   inner_join(points, by='pos') %>%
-  mutate(points_per_game = as.numeric(points_per_game),
-         chance_of_playing_next_round = ifelse(is.na(chance_of_playing_next_round), 100, chance_of_playing_next_round)) %>%
+  mutate(points_per_game = as.numeric(points_per_game)) %>%
   mutate(games = total_points/points_per_game,
-         prob60 = prob60 * chance_of_playing_next_round/100) %>%
+         prob60 = prob60) %>%
   mutate(probas = as.numeric(assists)/as.numeric(games),
          prob0 = .2 * (1-prob60),
          probless60 = .8 * (1-prob60)) %>%
@@ -265,6 +268,9 @@ rm(list = c('cs',
             'dedup',
             'dt.1',
             'dt.2',
+            'dt.2.1',
+            'dt.2.2',
+            'dt.2.3',
             'first11',
             'fpl.1',
             'fpl.2',
@@ -287,6 +293,7 @@ rm(list = c('cs',
             'result2',
             'result3',
             'right',
+            'subs',
             't',
             't.1',
             't.i',

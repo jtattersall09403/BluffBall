@@ -5,7 +5,7 @@ library(reshape2)
 library(TTR)
 
 # Get player and team data
-data <- getFPLSummary() %>%
+data <- fpl %>%
   mutate(id = as.numeric(id))
 
 # Geom series
@@ -58,7 +58,7 @@ details <- function(id) {
 }
 
 # Get all data for modelling
-modeldata <- lapply(data$id, details)
+modeldata <- lapply(sort(data$id), details)
 modeldata2 <- modeldata[!is.na(modeldata)]
 modeldata3 <- do.call(rbind, modeldata2) %>%
   filter(!is.na(avmins)) %>%
@@ -94,7 +94,7 @@ misClasificError <- mean(fitted.results != test$mins60, na.rm = T)
 print(paste('Accuracy',1-misClasificError))
 
 # Save model
-saveRDS(model, './startprob.rds')
+# saveRDS(model, './startprob.rds')
 
 # ------------------------------ Produce probability of starting next game ----------------------------- #
 
@@ -111,7 +111,7 @@ fpl.1 <- fpl %>%
   mutate(id = as.numeric(id)) %>%
   left_join(modelresults, by = 'id')
   
-# Predict next starting probability
-fpl.1$prob60 <- predict(model, newdata = fpl.1, type = 'response')
+# Predict next starting probability. Set to zero if injured.
+fpl.1$prob60 <- ifelse(status == 'a', predict(model, newdata = fpl.1, type = 'response'), 0)
   
 
