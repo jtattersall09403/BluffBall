@@ -9,6 +9,12 @@ library(fplr)
 source('./GetFPLData.R')
 source('./getOdds.R')
 
+# Pick up previous data
+load('.RData')
+
+# Record previous dreamteam
+dt.last <- dt.3
+
 # ----------------- FPL data ---------------
 
 # Get player and team data
@@ -238,19 +244,72 @@ fplsquad <- fpl.3 %>%
   mutate(pos = paste(pos.x, pos.y, sep="-"),
          price = now_cost.x + now_cost.y,
          xp = xp.x + xp.y) %>%
+  filter(xp > 2) %>%
   select(id.x,
          id.y,
-         first_name.x.x,
          second_name.x.x,
-         first_name.x.y,
          second_name.x.y,
          pos, price, xp)
+
+# Remove duplicates
+fplsquad <- fplsquad[!duplicated(data.frame(t(apply(fplsquad[,c(1,2)], 1, sort)), fplsquad$price)),]
+
 
 # Get dreamteam
 source('./Dreamteam/Dreamteam - recursive.R')
 
-# Set up table format string
-strformat <- "function( nRow, aData) {ind = 2; $('td:eq('+ind+')', nRow).html( parseFloat(aData[ind]).toFixed(2) );}"
+# Remove unnecessary objects
+rm(list = c('cs',
+            'cs_html',
+            'cs.split',
+            'dedup',
+            'dt.1',
+            'dt.2',
+            'first11',
+            'fpl.1',
+            'fpl.2',
+            'fpldat',
+            'keepers',
+            'left',
+            'matched.data',
+            'matches.out',
+            'model',
+            'modeldata',
+            'modeldata2',
+            'modeldata3',
+            'modelresults',
+            'names.split',
+            'namesmatched',
+            'odds_html',
+            'odds.split',
+            'players',
+            'result',
+            'result2',
+            'result3',
+            'right',
+            't',
+            't.1',
+            't.i',
+            'teams_odds',
+            'train',
+            'webpage',
+            'a',
+            'b',
+            'bank',
+            'fitted.results',
+            'i',
+            'index11',
+            'iter_max',
+            'misClasificError',
+            'n',
+            'odds',
+            'players_data',
+            'teams_data',
+            'url'))
+
+# Clean up remaining objects
+fpl <- fpl %>%
+  select(id, web_name, first_name.x, second_name.x, pos, team, now_cost, total_points, cs, goalprob)
 
 # Save everything for shinyApp
 save.image()

@@ -17,7 +17,6 @@ options(shiny.usecairo=T, digits = 2)
 
 # Pick up previous data
 load('.RData')
-strformat <- "function( nRow, aData) {ind = 2; $('td:eq('+ind+')', nRow).html( parseFloat(aData[ind]).toFixed(2) );}"
 
 # Get functions
 source('GetFPLData.R')
