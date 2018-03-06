@@ -222,6 +222,8 @@ shinyServer(function(input, output) {
   # Get single transfers
   single_trans <- eventReactive(input$optimise, {
     
+    showNotification('Getting transfers team...', duration = 10)
+    
     myteam2 <- myteam2()
     single_trans <- myteam2 %>%
       inner_join(select(fpl.3, id, web_name, pos, now_cost, team, goalprob, xp), by = c('pos' = 'pos')) %>%
@@ -251,7 +253,7 @@ shinyServer(function(input, output) {
              'Difference' = round(xpdiff,1),
              'Price difference' = (now_cost-price)/10) %>%
       select(`Transfer out`, `Original xp`, `Transfer in`, `New xp`, `Difference`, `Price difference`)
-    })
+    }, options = list(scrollX = TRUE))
   
   # Get double transfers
   double_trans <- eventReactive(input$optimise, {
@@ -310,7 +312,7 @@ shinyServer(function(input, output) {
              'New xp' = round(xp.y,1),
              'Difference' = round(xpdiff,1)) %>%
       select(`Transfer out`, `Original xp`, `Transfer in`, `New xp`, `Difference`)
-  })
+  }, options = list(scrollX = TRUE))
   
   # ------------------------ Making transfers -----------------
   
