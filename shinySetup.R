@@ -236,7 +236,8 @@ fpl.3 <- fpl.2 %>%
   mutate(xpap = ifelse(xm >= 60, 2, ifelse(xm > 0, 1, 0)),
          xpcs = prob60 * cs * cleansheet,
          xpas = prob60 * probas * 3) %>%
-  mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs, ifelse(is.na(xpas),0,xpas))
+  mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs, ifelse(is.na(xpas),0,xpas)) %>%
+  mutate(xp = ifelse(prob60 == 0, 0, xp))
 
 # Get all fpl pairs
 fpl.3$dum <- 1
@@ -312,7 +313,10 @@ rm(list = c('cs',
             'odds',
             'players_data',
             'teams_data',
-            'url'))
+            'url',
+            'bestTeam',
+            'test',
+            'data'))
 
 # Clean up remaining objects
 fpl <- fpl %>%

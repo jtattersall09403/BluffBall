@@ -107,11 +107,14 @@ modelresults <- modeldata3 %>%
   select(id, avmins_lag, trans_in, form2)
 
 # Match weighted average minutes and form to fpl data, and rename variables
+# Predict next starting probability. Set to zero if injured.
 fpl.1 <- fpl %>%
   mutate(id = as.numeric(id)) %>%
   left_join(modelresults, by = 'id')
+
+fpl.1$prob60 <- ifelse(fpl.1$status == 'a', predict(model, newdata = fpl.1, type = 'response'), 0)
   
-# Predict next starting probability. Set to zero if injured.
-fpl.1$prob60 <- ifelse(status == 'a', predict(model, newdata = fpl.1, type = 'response'), 0)
+
+
   
 

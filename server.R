@@ -243,12 +243,12 @@ shinyServer(function(input, output) {
     # Get optimised squad
     mysquad <- myteam3 %>%
       select(-order, -captain) %>%
-      rbind(myteam2[!myteam2$element %in% myteam3$element,])
+      rbind(inner_join(myteam2[!myteam2$element %in% myteam3$element,], numpos, by = 'pos')) %>%
+      ungroup
+    mysquad$minxp <- apply(mysquad, 1, function(x) min(myteam3$xp[myteam3$minpos==0 | myteam3$pos == x['pos']]))
     
     # Get single transfers with biggest impact on first team xp
     single_trans <- mysquad %>%
-      inner_join(numpos, by = 'pos') %>%
-      mutate(minxp = min(myteam3$xp[myteam3$minpos==0 | myteam3$pos == pos])) %>%
       inner_join(select(fpl.3, id, web_name, pos, now_cost, team, goalprob, xp), by = c('pos' = 'pos')) %>%
       mutate(xpdiff = ifelse(element %in% myteam3$element, xp.y - xp.x, xp.y - minxp) - ifelse(input$ft > 0, 0, 4)) %>%
       filter(xp.y > xp.x,
@@ -282,17 +282,39 @@ shinyServer(function(input, output) {
   # Get double transfers
   double_trans <- eventReactive(input$optimise, {
     
+    # Get data
     myteam2 <- myteam2()
+    myteam3 <- myteam3() %>%
+      group_by(pos) %>%
+      mutate(numpos = n()) %>%
+      mutate(minperpos = case_when(pos == 'Goalkeeper' ~ 1,
+                                   pos == 'Defender' ~ 3,
+                                   pos == 'Midfielder' ~ 2,
+                                   pos == 'Forward' ~ 1),
+             minpos = ifelse(numpos == minperpos, 1, 0))
+    
+    # Get number of first team players in each position
+    numpos <- myteam3 %>% select(pos, numpos, minperpos, minpos) %>% unique
+    
+    # Get number of players in each team
+    t.i <- myteam2 %>% group_by(team) %>% summarise(num = n())
+    
+    # Get optimised squad
+    mysquad <- myteam3 %>%
+      select(-order, -captain) %>%
+      rbind(inner_join(myteam2[!myteam2$element %in% myteam3$element,], numpos, by = 'pos')) %>%
+      ungroup
+    mysquad$minxp <- apply(mysquad, 1, function(x) min(myteam3$xp[myteam3$minpos==0 | myteam3$pos == x['pos']]))
+    mysquad$xp_eff <- ifelse(mysquad$element %in% myteam3$element, mysquad$xp, mysquad$minxp)
     
     # Get all squad pairs
-    myteam2$dum <- 1
-    squad <- myteam2 %>%
-      select(dum,  first_name.x, player_name, pos, team, price, xp) %>%
-      inner_join(myteam2, by = 'dum') %>%
+    mysquad$dum <- 1
+    squad <- mysquad %>%
+      inner_join(mysquad, by = 'dum') %>%
       filter(!(first_name.x.x == first_name.x.y & player_name.x == player_name.y)) %>%
       mutate(pos = paste(pos.x, pos.y, sep="-"),
              price = price.x + price.y,
-             xp = xp.x + xp.y) %>%
+             xp = xp_eff.x + xp_eff.y) %>%
       select(first_name.x.x,
              player_name.x,
              first_name.x.y,
@@ -513,7 +535,7 @@ shinyServer(function(input, output) {
   # Display dream team in table
   output$dreamteam <- DT::renderDataTable({
     dt.3 %>%
-      select(-rank, -captain)
+      select(-captain)
   }, options = list(pageLength = 11, scrollX = TRUE))
   
   # Display dreamteam on pitch

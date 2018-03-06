@@ -174,6 +174,7 @@ dt.2.2 <- dt.2.1 %>%
 
 #  ----------------- Find best single transfer you can now afford for your first 11 ------------
 # Which teams are ineligible for transfers in?
+# Should really do this iteratively in case selling the subs makes you load sof money
 t.i <- dt.2.2 %>%
   group_by(team) %>%
   summarise(num = n()) %>%
@@ -197,6 +198,7 @@ t <- t.1 %>% arrange(xpdiff) %>%
 
 # Update team
 dt.2.3 <- dt.2.2 %>%
+  select(-captain) %>%
   filter(element != t$element) %>%
   rbind(select(filter(fpl.3, id == t$id), 'element'=id, pos, team, web_name, now_cost, xp)) %>%
   mutate(position = row_number())
