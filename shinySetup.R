@@ -5,6 +5,7 @@ library(dplyr)
 library(fastLink)
 library(reshape2)
 library(fplr)
+library(parallel)
 
 source('./GetFPLData.R')
 source('./getOdds.R')
@@ -261,6 +262,7 @@ fplsquad <- fplsquad[!duplicated(data.frame(t(apply(fplsquad[,c(1,2)], 1, sort))
 
 # Get dreamteam
 source('./Dreamteam/Dreamteam - recursive.R')
+sum(dt.3[1:11,'xp'])
 
 # Remove unnecessary objects
 rm(list = c('cs',

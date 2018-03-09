@@ -8,7 +8,7 @@ library(DT)
 library(plotly)
 
 # Set gameweek
-gw <- 29
+gw <- 30
 
 # Define UI for application
 shinyUI(dashboardPage(skin = 'green',
@@ -87,7 +87,7 @@ shinyUI(dashboardPage(skin = 'green',
               fluidRow(
                 box(width = 12,
                     textInput('teamid', label = 'Enter team ID', value = 'fantasy.premierleague.com/a/team/4880044/event/28'),
-                    textInput('gw', label = 'Gameweek', value = as.character(gw)),
+                    textInput('gw', label = 'Gameweek', value = as.character(gw-1)),
                     actionButton('import_team', label = 'Import'))
               ),
               fluidRow(

@@ -13,6 +13,7 @@ library(ggplot2)
 library(plotly)
 library(ggforce)
 library(Cairo)
+
 options(shiny.usecairo=T, digits = 2)
 
 # Pick up previous data
@@ -535,7 +536,9 @@ shinyServer(function(input, output) {
   # Display dream team in table
   output$dreamteam <- DT::renderDataTable({
     dt.3 %>%
-      select(-captain)
+      select(-captain) %>%
+      mutate(xp = round(xp,1)) %>%
+      as.data.frame
   }, options = list(pageLength = 11, scrollX = TRUE))
   
   # Display dreamteam on pitch

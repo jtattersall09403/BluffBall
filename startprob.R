@@ -3,6 +3,7 @@
 library(dplyr)
 library(reshape2)
 library(TTR)
+library(parallel)
 
 # Get player and team data
 data <- fpl %>%
@@ -57,8 +58,37 @@ details <- function(id) {
   
 }
 
-# Get all data for modelling
-modeldata <- lapply(sort(data$id), details)
+# Calculate the number of cores
+no_cores <- detectCores() - 1
+
+# Initiate cluster
+cl <- makeCluster(no_cores)
+
+# Include relevant variables and packages
+clusterEvalQ(cl, {
+   library(jsonlite)
+   library(dplyr)
+   library(ggplot2)
+   library(ggrepel)
+   library(engsoccerdata)
+   library(devtools)
+   library(fplr)
+   library(dplyr)
+   library(reshape2)
+   library(TTR)
+   geomSeries <- function(base, n) {
+     base^(1:n)
+   }
+})
+  
+clusterExport(cl, "data")
+
+# Get all data for modelling. Now only takes around 1 minute!
+modeldata <- parLapply(cl, sort(data$id), details)
+
+# Close cluster
+stopCluster(cl)
+
 modeldata2 <- modeldata[!is.na(modeldata)]
 modeldata3 <- do.call(rbind, modeldata2) %>%
   filter(!is.na(avmins)) %>%
