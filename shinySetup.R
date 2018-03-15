@@ -334,7 +334,12 @@ rm(list = c('cs',
             'mysquad',
             'squad',
             'cl',
-            'double_transfers'))
+            'double_transfers',
+            'dt.f11',
+            't.1.1',
+            'tmp',
+            'autosubs',
+            'dt.squad'))
 
 # Clean up remaining objects
 fpl <- fpl %>%

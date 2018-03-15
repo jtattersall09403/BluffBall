@@ -173,60 +173,118 @@ dt.2.2 <- dt.2.1 %>%
   rbind(select(subs, 'element'=id, pos, 'team' = team.y, 'web_name' = web_name.y, 'now_cost'=now_cost.y, 'xp'=xp.y, captain))
 
 #  ----------------- Find best single transfer you can now afford for your first 11 ------------
-# Which teams are ineligible for transfers in?
-# Should really do this iteratively in case selling the subs makes you load sof money
-t.i <- dt.2.2 %>%
-  group_by(team) %>%
-  summarise(num = n()) %>%
-  filter(num >= 3)
 
-# Check transfers
-t.1 <- dt.2.2[1:11,] %>%
-  ungroup %>%
-  inner_join(select(fpl.3, id, team, web_name, pos, now_cost, xp), by = 'pos') %>% View
-  filter(!id %in% dt.2.2$element,
-         !team.y %in% t.i$team) %>%
-  mutate(pricediff = now_cost.x - now_cost.y,
-         xpdiff = xp.x - xp.y) %>%
-  filter(pricediff + bank > 0,
-         xpdiff < 0)
+# Initialise loop
+t <- data.frame(dummy = 1)
 
-# Best
-t <- t.1 %>% arrange(xpdiff) %>%
-  slice(1) %>%
-  select(element, id)
-
-# Update team
-if(nrow(t) > 0) {
-  dt.2.3 <- dt.2.2 %>%
-    select(-captain) %>%
-    filter(element != t$element) %>%
-    rbind(select(filter(fpl.3, id == t$id), 'element'=id, pos, team, web_name, now_cost, xp)) %>%
-    mutate(position = row_number())
-} else {
-  dt.2.3 <- dt.2.2 %>% mutate(position = row_number())
+while(nrow(t) > 0) {
+  # Record number in each position
+  dt.squad <- dt.2.2 %>%
+    mutate(dum = c(rep(1,11), rep(2,4))) %>%
+    group_by(dum, pos) %>%
+    mutate(numpos = n()) %>%
+    mutate(minperpos = case_when(pos == 'Goalkeeper' ~ 1,
+                                 pos == 'Defender' ~ 3,
+                                 pos == 'Midfielder' ~ 2,
+                                 pos == 'Forward' ~ 1),
+           minpos = ifelse(numpos == minperpos, 1, 0))
+  
+  # First 11
+  dt.f11 <- dt.squad[1:11,]
+  
+  # Get effective xp - for first team players, this is their xp. For subs, its the xp of the worst first team
+  # player they could sub in for.
+  dt.squad$minxp <- apply(dt.squad, 1, function(x) min(dt.f11$xp[dt.f11$minpos==0 | dt.f11$pos == x['pos']]))
+  dt.2.2$xp_eff <- ifelse(dt.squad$element %in% dt.f11$element, dt.squad$xp, dt.squad$minxp)
+  
+  # Which teams are ineligible for transfers in?
+  t.i <- dt.2.2 %>%
+    group_by(team) %>%
+    summarise(num = n()) %>%
+    filter(num >= 3)
+  
+  # Check transfers
+  t.1 <- dt.2.2[1:11,] %>%
+    ungroup %>%
+    inner_join(select(fpl.3, id, team, web_name, pos, now_cost, xp), by = 'pos') %>%
+    filter(!id %in% dt.2.2$element) %>%
+    mutate(pricediff = now_cost.x - now_cost.y,
+           xpdiff = xp_eff - xp.y) %>%
+    filter(pricediff + bank > 0,
+           xpdiff < 0) %>%
+    arrange(xpdiff)
+  
+  # Check if best is legal
+  if(nrow(t.1) > 0 & !t.1$team.y[1] %in% t.i$team) {
+    t <- t.1 %>%
+      slice(1) %>%
+      select(element, id)
+  } else {
+    
+    # Right. This bit checks what the best transfer you might want to make is.
+    # If it's legal, it makes it. If it isn't (because of squad limitations), it checks who you would
+    # need to sell to free up a squad spot for it. It looks at who you could bring in for them,
+    # and the total xp cost/benefit and cash cost/benefit of doing so. If it's a good trade, it makes it.
+    tmp <- t.1 %>%
+      mutate(legal = ifelse(team.y %in% t.i$team, 0, 1)) %>%
+      inner_join(dt.2.2, by = c('team.y'='team')) %>%
+      inner_join(select(fpl.3, id, team, web_name, pos, now_cost, xp), by = c('pos.y'='pos')) %>%
+      filter(!id.y %in% dt.2.2$element,
+             !team %in% t.i$team) %>%
+      mutate(pricediff = now_cost.x + now_cost.x.x - now_cost.y - now_cost.y.y,
+             xpdiff.y = ifelse(legal==1, xpdiff, xpdiff + xp_eff.y - xp.y.y)) %>%
+      arrange(xpdiff.y) %>%
+      filter(xpdiff.y < 0, pricediff + bank > 0) %>%
+      slice(1) %>%
+      select(legal, element.x, id.x, element.y, id.y)
+    
+    if (nrow(tmp) > 0) {
+      if (tmp$legal == 1) {
+        t <- data.frame(element = tmp$element.x, id = tmp$id.x)
+      } else {
+        t <- data.frame(element = c(tmp$element.x, tmp$element.y),
+                        id = c(tmp$id.x, tmp$id.y))
+      }
+    } else {
+      t <- slice(tmp, 0)
+    }
+    
+  }
+  
+  # Drop effective xp column
+  dt.2.2$xp_eff <- NULL
+  
+  # Update team
+  if(nrow(t) > 0) {
+    dt.2.3 <- dt.2.2 %>%
+      select(-captain) %>%
+      filter(!element %in% t$element) %>%
+      rbind(select(filter(fpl.3, id %in% t$id), 'element'=id, pos, team, web_name, now_cost, xp)) %>%
+      mutate(position = row_number())
+  } else {
+    dt.2.3 <- dt.2.2 %>% mutate(position = row_number())
+  }
+  
+  
+  # Update bank
+  bank <- 1000 - sum(dt.2.3$now_cost)
+  print(paste0('Iteration ', i, ', Out: ', fpl.3$web_name[fpl.3$id %in% t$element], ', In: ', fpl.3$web_name[fpl.3$id %in% t$id], ', Bank:', bank))
+  
+  # Get final dreamteam
+  first11 <- getBestTeam(dt.2.3) %>% select(-position, -order)
+  dt.2.2 <- rbind(first11, select(filter(mutate(dt.2.3, captain = 0), !element %in% first11$element), element, pos, team, web_name, now_cost, xp, captain))
+  
 }
 
-
-# Update bank
-bank <- 1000 - sum(dt.2.3$now_cost)
-print(paste0('Iteration ', i, ', Out: ', fpl.3$web_name[fpl.3$id == t$element], ', In: ', fpl.3$web_name[fpl.3$id == t$id], ', Bank:', bank))
-
-# Get final dreamteam
-first11 <- getBestTeam(dt.2.3) %>% select(-position, -order)
-dt.3 <- rbind(first11, select(filter(mutate(dt.2.3, captain = 0), !element %in% first11$element), element, pos, team, web_name, now_cost, xp, captain))
-  
+# Update dreamteam object
+dt.3 <- dt.2.2
 
 # ---------- Results ----------
 View(dt.3)
 
 # Print remaining funds and expected points
 bank
-sum(dt.3$xp)
-
-# Total xp
-dt.3.xp <- sum(dt.3[1:11,'xp'])
-dt.3.xp
+sum(dt.3[1:11,'xp'])
 
 
 # mysquad <- dt.3
