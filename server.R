@@ -558,5 +558,32 @@ shinyServer(function(input, output) {
     paste0('£', sum(dt.3[,'now_cost'])/10, ' million')
   })
   
+  # Display last week's dream team in table
+  output$dt.last_tab <- DT::renderDataTable({
+    dt.last.2 %>%
+      mutate(Points = round(event_points,1)) %>%
+      select(-captain, -event_points) %>%
+      as.data.frame
+  }, options = list(pageLength = 11, scrollX = TRUE))
+  
+  
+  # Display last week's dreamteam on pitch
+  output$dt.last_vis <- renderPlot({
+    dt.last.2 %>%
+      rename(player_name = web_name,
+             xp.old = xp,
+             xp = event_points) %>%
+      teamvis
+  })
+  
+  # Get last dreamteam total points
+  output$dt.lastpoints <- renderText({
+    paste(round(sum(dt.last.2[1:11,'event_points']), 0))
+  })
+  
+  # Get last dreamteam expected points
+  output$dt.last_xp <- renderText({
+    paste(round(sum(dt.last.2[1:11,'xp']), 0))
+  })
   
 })

@@ -24,12 +24,20 @@ teams <- as.character(unique(fpldat$team))
 teams[teams == 'Spurs'] <- 'Tottenham'
 
 # Get last week's dreamteam points
-dt.last <- dt.3 %>%
-  inner_join(select(fpldat, id, event_points), by = c('element'='id')) %>%
-  mutate(event_points = ifelse(captain == 1, event_points * 2, event_points))
+n <- length(dt.all)
+if(!identical(dt.all[[n]]$element, dt.3$element)) {
+  dt.last <- dt.3 %>%
+    inner_join(select(fpldat, id, event_points), by = c('element'='id')) %>%
+    mutate(event_points = ifelse(captain == 1, event_points * 2, event_points))
+  
+  # Make auto subs and add to list
+  dt.last.2 <- autosub(dt.last)
+  dt.all[[n+1]] <- dt.last.2
+}
 
 # Show total points
-sum(dt.last[1:11,'event_points'])
+dt.last.2
+sum(dt.last.2[1:11,'event_points'])
 
 # -------------------------------------- Goalscorer odds -----------------------
 
@@ -228,6 +236,7 @@ fpl.3 <- fpl.2 %>%
          prob0 = .2 * (1-prob60),
          probless60 = .8 * (1-prob60)) %>%
   mutate(prob60 = ifelse(prob60 < 0.08, 0, prob60)) %>%
+  mutate(prob60 = ifelse(as.numeric(ep_next) <= 0, 0, prob60)) %>% # Set probability of playing to 0 if no fixture
   mutate(xgp1 = goalprob1 * goal,
          xgp2 = probBrace * goal * 2,
          xgp3 = probHt * goal * 3,
@@ -238,7 +247,9 @@ fpl.3 <- fpl.2 %>%
          xpcs = prob60 * cs * cleansheet,
          xpas = prob60 * probas * 3) %>%
   mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs, ifelse(is.na(xpas),0,xpas)) %>%
-  mutate(xp = ifelse(prob60 == 0, 0, xp))
+  mutate(xp = ifelse(prob60 == 0, 0, xp)) %>% # Set to 0 if not predicted to play
+  mutate(xp = ifelse(is.na(goalprob), as.numeric(ep_next), xp)) # Set to modelled value if goal odds not present.
+
 
 # Get all fpl pairs
 fpl.3$dum <- 1
@@ -318,7 +329,12 @@ rm(list = c('cs',
             'url',
             'bestTeam',
             'test',
-            'data'))
+            'data',
+            'myteam2',
+            'mysquad',
+            'squad',
+            'cl',
+            'double_transfers'))
 
 # Clean up remaining objects
 fpl <- fpl %>%

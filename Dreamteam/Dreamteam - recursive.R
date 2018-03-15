@@ -183,7 +183,7 @@ t.i <- dt.2.2 %>%
 # Check transfers
 t.1 <- dt.2.2[1:11,] %>%
   ungroup %>%
-  inner_join(select(fpl.3, id, team, web_name, pos, now_cost, xp), by = 'pos') %>%
+  inner_join(select(fpl.3, id, team, web_name, pos, now_cost, xp), by = 'pos') %>% View
   filter(!id %in% dt.2.2$element,
          !team.y %in% t.i$team) %>%
   mutate(pricediff = now_cost.x - now_cost.y,
@@ -197,11 +197,16 @@ t <- t.1 %>% arrange(xpdiff) %>%
   select(element, id)
 
 # Update team
-dt.2.3 <- dt.2.2 %>%
-  select(-captain) %>%
-  filter(element != t$element) %>%
-  rbind(select(filter(fpl.3, id == t$id), 'element'=id, pos, team, web_name, now_cost, xp)) %>%
-  mutate(position = row_number())
+if(nrow(t) > 0) {
+  dt.2.3 <- dt.2.2 %>%
+    select(-captain) %>%
+    filter(element != t$element) %>%
+    rbind(select(filter(fpl.3, id == t$id), 'element'=id, pos, team, web_name, now_cost, xp)) %>%
+    mutate(position = row_number())
+} else {
+  dt.2.3 <- dt.2.2 %>% mutate(position = row_number())
+}
+
 
 # Update bank
 bank <- 1000 - sum(dt.2.3$now_cost)
@@ -223,3 +228,36 @@ sum(dt.3$xp)
 dt.3.xp <- sum(dt.3[1:11,'xp'])
 dt.3.xp
 
+
+# mysquad <- dt.3
+# # Get all squad pairs
+# mysquad$dum <- 1
+# squad <- mysquad %>%
+#   inner_join(mysquad, by = 'dum') %>%
+#   filter(!(web_name.x == web_name.y)) %>%
+#   mutate(pos = paste(pos.x, pos.y, sep="-"),
+#          price = now_cost.x + now_cost.y,
+#          xp = xp.x + xp.y) %>%
+#   select(web_name.x,
+#          web_name.y,
+#          pos, price, xp)
+# 
+# # Remove duplicates
+# squad <- squad[!duplicated(data.frame(t(apply(squad[,c(2,4)], 1, sort)), squad$price)),]
+# 
+# # Join squad pairs to fpl pairs
+# double_transfers <- inner_join(squad, fplsquad, by = 'pos') %>%
+#   mutate(xpdiff = xp.y - xp.x) %>%
+#   filter(price.x + bank >= price.y,
+#          !id.x %in% myteam2$element,
+#          !id.y %in% myteam2$element) %>%
+#   group_by(pos) %>%
+#   mutate(rank = rank(desc(xpdiff), ties.method = 'first')) %>%
+#   filter(xpdiff >0) %>%
+#   #filter(rank <= 5) %>%
+#   arrange(desc(xpdiff))
+# 
+# # Remove duplicates
+# double_transfers <- double_transfers[!duplicated(data.frame(t(apply(double_transfers[,c('second_name.x.x','second_name.x.y')], 1, sort)), double_transfers$price.x)),]
+# 
+# View(double_transfers)

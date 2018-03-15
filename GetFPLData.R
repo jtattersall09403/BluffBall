@@ -245,3 +245,67 @@ teamvis <- function(myteam2) {
 }
 
 
+# Automatic subs for dreamteam
+autosub <- function(dt.last) {
+  # Auto subs
+  dt.last$order <- 1:15
+  dt.last$dum <- 1
+  autosubs <- dt.last[1:11,] %>%
+    group_by(pos) %>%
+    mutate(numpos = n()) %>%
+    mutate(minperpos = case_when(pos == 'Goalkeeper' ~ 1,
+                                 pos == 'Defender' ~ 3,
+                                 pos == 'Midfielder' ~ 2,
+                                 pos == 'Forward' ~ 1),
+           minpos = ifelse(numpos == minperpos, 1, 0)) %>%
+    filter(event_points == 0) %>%
+    left_join(dt.last[12:15,], by = 'dum') %>%
+    filter(pos.x == pos.y | minpos == 0) %>%
+    filter(event_points.y > 0) %>%
+    arrange(order.y) %>%
+    ungroup %>%
+    slice(1) %>%
+    select(element.x, element.y)
+  
+  # If any eligible auto subs, make them
+  while (nrow(autosubs) > 0) {
+    autosubs <- unlist(autosubs)
+    
+    dt.last.2<- data.frame(element = replace(dt.last$element,
+                                             match(autosubs, dt.last$element),
+                                             dt.last$element[c(match(autosubs, dt.last$element)[2],
+                                                               match(autosubs, dt.last$element)[1])]
+    )
+    ) %>%
+      inner_join(dt.last)
+    
+    # Update team
+    dt.last <- dt.last.2 %>%
+      slice(1:11) %>%
+      arrange(as.integer(pos)) %>%
+      rbind(dt.last.2[12:15,])
+    
+    # Check if any more to do
+    autosubs <- dt.last[1:11,] %>%
+      group_by(pos) %>%
+      mutate(numpos = n()) %>%
+      mutate(minperpos = case_when(pos == 'Goalkeeper' ~ 1,
+                                   pos == 'Defender' ~ 3,
+                                   pos == 'Midfielder' ~ 2,
+                                   pos == 'Forward' ~ 1),
+             minpos = ifelse(numpos == minperpos, 1, 0)) %>%
+      filter(event_points == 0) %>%
+      left_join(dt.last[12:15,], by = 'dum') %>%
+      filter(pos.x == pos.y | minpos == 0) %>%
+      filter(event_points.y > 0) %>%
+      ungroup %>%
+      arrange(order.y) %>%
+      slice(1) %>%
+      select(element.x, element.y)
+  }
+  
+  # Keep relevant variables
+  dt.last <- dt.last[,1:8]
+  
+  return(dt.last)
+}

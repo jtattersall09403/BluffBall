@@ -8,7 +8,7 @@ library(DT)
 library(plotly)
 
 # Set gameweek
-gw <- 30
+gw <- 31
 
 # Define UI for application
 shinyUI(dashboardPage(skin = 'green',
@@ -214,6 +214,30 @@ shinyUI(dashboardPage(skin = 'green',
                     title = '',
                     status = 'primary',
                     plotOutput('dreamteam_vis'))
+              ),
+              h2("Last week's dreamteam performance - did you beat the bookies?"),
+              p(),
+              fluidRow(
+                box(width = 6,
+                    title = 'Expected points',
+                    solidHeader = T,
+                    status = 'success',
+                    h1(textOutput('dt.last_xp'))),
+                box(width = 6,
+                    title = 'Actual points',
+                    solidHeader = T,
+                    status = 'success',
+                    h1(textOutput('dt.lastpoints')))
+              ),
+              fluidRow(
+                box(width = 6,
+                    title = 'Dreamteam',
+                    status = 'primary',
+                    DT::dataTableOutput('dt.last_tab')),
+                box(width = 6,
+                    title = '',
+                    status = 'primary',
+                    plotOutput('dt.last_vis'))
               )
     )
 
