@@ -8,7 +8,7 @@ library(DT)
 library(plotly)
 
 # Set gameweek
-gw <- 32
+gw <- 33
 
 # Define UI for application
 shinyUI(dashboardPage(skin = 'green',

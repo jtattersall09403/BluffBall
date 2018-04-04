@@ -4,42 +4,25 @@ library(RSelenium)
 library(XML)
 
 source('./Project files/Points simulation v2.R')
-source('C:/Users/jackt/Documents/R/win-library/3.4/RSelenium/examples/serverUtils/checkForServer.R')
-source('C:/Users/jackt/Documents/R/win-library/3.4/RSelenium/examples/serverUtils/startServer.R')
-
-# Make sure you have server installed
-checkForServer()
-
-# use default server 
-# Run this in cmd
-# cd C:\Users\jackt\Documents\R\win-library\3.4\RSelenium\bin
-# java -jar selenium-server-standalone.jar -port 4445
-
-remDr <- remoteDriver(remoteServerAddr = "localhost"
-                      , port = 4445
-                      , browserName = "firefox"
-)
-
-remDr$open
 
 # Competitions
-comps <- c('slam', 'strike', 'coin', 'double')
-entries <- c(2400, 20, 50, 4)
-fees <- c(11, 3.3, 1.1, 11)
-prizes <- list(c(10009.52,
-                 2051.12,
-                 1394.76,
-                 1025.56,
-                 738.4,
-                 492.27,
-                 328.18,
-                 164.09,
-                 123.06,
-                 82.04,
-                 rep(77,20),
-                 rep(33,104),
-                 rep(11,329)),
-               c(33.75, 18.75, 13.13, 9.38),
+comps <- c('grand', 'strike', 'coin', 'double')
+entries <- c(150, 37, 50, 4)
+fees <- c(33, 3.3, 1.1, 11)
+prizes <- list(c(1000,
+                 500,
+                 300,
+                 200,
+                 100,
+                 c(50,10),
+                 c(33,10)),
+               c(38.85,
+                 24.42,
+                 16.1,
+                 11.93,
+                 8.33,
+                 6.38,
+                 5),
                c(17.5,
                  11,
                  7.25,

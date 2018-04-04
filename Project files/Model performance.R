@@ -5,6 +5,7 @@ library(dplyr)
 library(plotly)
 library(viridis)
 library(reshape2)
+library(caret)
 
 # Get data
 load('.RData')
@@ -16,12 +17,13 @@ fpldat <- getFPLSummary() %>%
 
 # Match to predicted
 mdl <- fpl.3 %>%
-  select(id, web_name, xp) %>%
-  inner_join(fpldat, by = 'id')
+  inner_join(fpldat, by = 'id') %>%
+  mutate(last_event_points = event_points.x,
+         event_points = event_points.y)
 
 # How close was expected points to actual points summed over the whole gameweek?
 sum(mdl$xp, na.rm=TRUE)
-sum(mdl$event_point)
+sum(mdl$event_points)
 
 # Distributions of predicted and actual points
 hist(mdl$event_points[mdl$event_points!=0])
@@ -78,8 +80,29 @@ data.frame(mdl$xp, res, mdl$web_name) %>%
 sqrt(mean(res^2,na.rm=T))
 
 # R square
-mdl <- mdl[!is.na(mdl$xp),]
-1-sum((mdl$xp - mdl$event_points)^2)/sum((mdl$event_points - mean(mdl$event_points))^2)
+caret::R2(mdl$xp, mdl$event_points, na.rm = T)
+
+# Record gw
+mdl$gw <- 32
 
 # Save data
-saveRDS(mdl, './Project files/gw32.rds')
+saveRDS(mdl, './Project files/Data archive/gw32.rds')
+
+# --------------- Dreamteam performance -------------
+
+source('./Dreamteam/Dreamteam - recursive v2.R')
+
+# Get player and team data
+fpldat <- getFPLSummary() %>%
+  mutate('player_name' = paste(first_name, second_name))
+
+# Select best possible team using your algorithm, with budget available to best human player
+dt_act <- fpldat %>%
+  mutate(xp = event_points) %>%
+  dreamteam(budget = 1000)
+
+dt_act
+sum(dt_act[1:11, 'xp'])
+
+# If this continues to be just as good as the best human player/the fpl app dreamteam,
+# then no need to change it

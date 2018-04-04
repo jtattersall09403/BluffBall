@@ -18,6 +18,13 @@ load('.RData')
 
 # Get player and team data
 fpldat <- getFPLSummary() %>%
+  mutate_at(c(3,7,8), function(x) gsub("é","e",
+                               gsub("á", "a",
+                                    gsub("õ", "o",
+                                         gsub("í","i",
+                                              gsub("ã","a",
+                                                   gsub("Ö","O",
+                                                        gsub("ß","ss",x)))))))) %>%
   mutate('player_name' = paste(first_name, second_name))
 
 # Get teams
@@ -37,6 +44,7 @@ if(!identical(dt.all[[n]]$element, dt.3$element)) {
 }
 
 # Show total points
+n <- length(dt.all)
 dt.all[[n]]
 sum(dt.all[[n]][1:11,'event_points'])
 
@@ -91,7 +99,7 @@ matches.out <- fastLink(
   dfA = left,
   dfB = right, 
   varnames = c("player_name","web_name", "first_name","second_name"),
-  stringdist.match = c("player_name","web_name", "first_name","second_name"), # Specifies the variables you want to treat as strings for fuzzy matching
+  stringdist.match = c("player_name", "web_name", "first_name","second_name"), # Specifies the variables you want to treat as strings for fuzzy matching
   #partial.match = c("player_name","web_name", "first_name","second_name"), # Specifes variables where you want the algorithm to check for partial matches
   verbose = T,
   return.all = T
@@ -139,6 +147,40 @@ names(keepers) <- names(dedup)
 fpl <- rbind(as.data.frame(dedup), as.data.frame(keepers)) %>%
   mutate(goalprob1 = goalprob - probBrace - probHt)
 
+# Show whose goalscorer odds are missing
+fpl %>%
+  filter(pos != 'Goalkeeper', (is.na(goalprob))) %>%
+  select(web_name, team, goalprob, form) %>%
+  arrange(desc(form)) %>% View
+
+# Get those that didn't match and sor tout manually
+nonmatched <- fpl %>%
+  filter(pos != 'Goalkeeper', (is.na(goalprob))) %>%
+  select(-goalprob,
+         -probBrace,
+         -probHt,
+         -match,
+         -rank) %>%
+  mutate(player=case_when(web_name=="Willian" ~ "Willian",
+                          web_name=="Joao Mario" ~ "Joao Mario",
+                          id==302 ~ "Ayoze",
+                          web_name=="Bernardo Silva" ~ "Bernardo Silva")) %>%
+  inner_join(names.split, by=c("player"="player_name")) %>%
+  mutate(match = as.numeric(NA),
+         rank = 1) %>%
+  mutate(web_name = web_name.x) %>%
+  select(-first_name, -second_name, -web_name.y, -web_name.x, -player)
+  
+# Append manual matches to main file
+fpl <- fpl %>%
+  filter(!id %in% nonmatched$id) %>%
+  union(nonmatched)
+  
+# Show whose goalscorer odds are missing
+fpl %>%
+  filter(pos != 'Goalkeeper', (is.na(goalprob))) %>%
+  select(web_name, team, status, goalprob, form) %>%
+  arrange(desc(form)) %>% View
 
 # ------------------------ Clean sheet data ---------------------
 
@@ -278,7 +320,9 @@ fplsquad <- fplsquad[!duplicated(data.frame(t(apply(fplsquad[,c(1,2)], 1, sort))
 
 
 # Get dreamteam
-source('./Dreamteam/Dreamteam - recursive.R')
+dt.3 <- dreamteam(fpl.3)
+
+dt.3
 sum(dt.3[1:11,'xp'])
 sum(dt.3['now_cost'])
 
@@ -346,7 +390,8 @@ rm(list = c('cs',
             't.1.1',
             'tmp',
             'autosubs',
-            'dt.squad'))
+            'dt.squad',
+            'nonmatched'))
 
 # Clean up remaining objects
 fpl <- fpl %>%

@@ -96,6 +96,8 @@ modeldata3 <- do.call(rbind, modeldata2) %>%
          minsany = ifelse(minutes >0, 1, 0),
          trans_in = as.factor(trans_in))
 
+saveRDS(modeldata3, './Project files/startprob_modeldata.rds')
+
 # ------------------------------ Train models ------------------------------  #
 
 # Quick visualisation

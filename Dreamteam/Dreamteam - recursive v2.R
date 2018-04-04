@@ -1,6 +1,6 @@
 # ---------- Recursive dreamteam approach -----------
 
-dreamteam <- function(data)  {
+dreamteam <- function(data, budget = 1000)  {
   dt.1 <- data %>%
     arrange(desc(xp)) %>%
     group_by(pos) %>%
@@ -20,7 +20,7 @@ dreamteam <- function(data)  {
   
   # Record bank
   i = 1
-  bank <- 1000 - sum(dt.1$now_cost)
+  bank <- budget - sum(dt.1$now_cost)
   bank
   
   while (bank < 0 | squadlegal(dt.1) == F) {
@@ -65,7 +65,7 @@ dreamteam <- function(data)  {
         arrange(pos)
       
       # Update bank
-      bank <- 1000 - sum(dt.1$now_cost)
+      bank <- budget - sum(dt.1$now_cost)
       
       # Repeat until affordable 
       print(paste0('Iteration ', i, ', Out: ', data$web_name[data$id == t$id.x], ', In: ', data$web_name[data$id == t$id.y], ', Bank:', bank))
@@ -105,7 +105,7 @@ dreamteam <- function(data)  {
       arrange(pos)
     
     # Update bank
-    bank <- 1000 - sum(dt.1$now_cost)
+    bank <- budget - sum(dt.1$now_cost)
     
     # Update teams ineligible for transfers
     t.i <- dt.1 %>%
@@ -283,7 +283,7 @@ dreamteam <- function(data)  {
       dt.2.3 <- dt.2.2 %>%
         select(-captain) %>%
         filter(!element %in% t$element) %>%
-        rbind(select(filter(data, id %in% t$id), 'element'=id, pos, team, web_name, now_cost, xp)) %>%
+        union(select(filter(data, id %in% t$id), 'element'=id, pos, team, web_name, now_cost, xp)) %>%
         mutate(position = row_number())
     } else {
       dt.2.3 <- dt.2.2 %>% mutate(position = row_number())
@@ -291,7 +291,7 @@ dreamteam <- function(data)  {
     
     
     # Update bank
-    bank <- 1000 - sum(dt.2.3$now_cost)
+    bank <- budget - sum(dt.2.3$now_cost)
     print(paste0('Iteration ', i, ', Out: ', data$web_name[data$id %in% t$element], ', In: ', data$web_name[data$id %in% t$id], ', Bank:', bank))
     
     # Get final dreamteam

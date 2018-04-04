@@ -2,17 +2,17 @@ library(FLSSS)
 library(dplyr)
 library(microbenchmark)
 
+# # data
+# data <- data.frame(id = 1:15,
+#                    pos = as.factor(c(1,1,
+#                            rep(2,5),
+#                            rep(3,5),
+#                            rep(4,3)))) %>%
+#   mutate(now_cost = round(rnorm(15, 66, 15), 1),
+#          xp = round(now_cost*runif(15, min = 0.05, max = 0.1), 2))
+# 
+# # Check
 # data
-data <- data.frame(id = 1:15,
-                   pos = as.factor(c(1,1,
-                           rep(2,5),
-                           rep(3,5),
-                           rep(4,3)))) %>%
-  mutate(now_cost = round(rnorm(15, 66, 15), 1),
-         xp = round(now_cost*runif(15, min = 0.05, max = 0.1), 2))
-
-# Check
-data
 
 getBestTeam <- function(data, pos = "pos") {
   # formulate multidimensional vector

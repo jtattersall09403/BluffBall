@@ -1,156 +1,99 @@
 library(dplyr)
-library(jsonlite)
+library(fplr)
 library(ggplot2)
+library(parallel)
+library(mlbench)
+library(caret)
 
-players <- function() {
-  
-  # look-up table of player statuses
-  status <- data.frame(id = c("a", "d", "i", "s", "u"), player_status = c("Available", "Doubtful", "Injured", 
-                                                                          "Suspended", "Unavailable"))
-  
-  # read in json player data, simplify vectors to make easy transfer to dataframe
-  extract <- jsonlite::read_json("https://fantasy.premierleague.com/drf/bootstrap-static", simplifyVector = TRUE)
-  
-  # extract player data ONLY, convert to tibble format
-  data <- tibble::as.tibble(extract$elements)
-  
-  # replace codes with matching values
-  data$team_name <- with(extract$teams, name[match(data$team_code, code)])
-  data$position <- with(extract$element_types, singular_name[match(data$element_type, id)])
-  data$status <- with(status, player_status[match(data$status, id)])
-  
-  # convert values to fpl-familiar style
-  data$price <- data$now_cost/10
-  data$price_change_abs <- data$cost_change_start/10
-  data$price_change_round <- data$cost_change_event/10
-  
-  # convert var names
-  data$transfers_out_round <- data$transfers_out_event
-  data$transfers_in_round <- data$transfers_in_event
-  data$round_points <- data$event_points
-  
-  # convert var types
-  data$value_form <- as.numeric(data$value_form)
-  data$value_season <- as.numeric(data$value_season)
-  data$selected_by_percent <- as.numeric(data$selected_by_percent)
-  data$form <- as.numeric(data$form)
-  data$points_per_game <- as.numeric(data$points_per_game)
-  data$ep_this <- as.numeric(data$ep_this)
-  data$ep_next <- as.numeric(data$ep_next)
-  data$influence <- as.numeric(data$influence)
-  data$creativity <- as.numeric(data$creativity)
-  data$threat <- as.numeric(data$threat)
-  data$ict_index <- as.numeric(data$ict_index)
-  
-  # subset columns
-  data <- subset(data, select = c(id, code, first_name, second_name, web_name, team_name, position, status, 
-                                  news, price, price_change_abs, price_change_round, chance_of_playing_this_round, chance_of_playing_next_round, 
-                                  value_form, value_season, in_dreamteam, dreamteam_count, selected_by_percent, form, transfers_out, transfers_in, 
-                                  transfers_out_round, transfers_in_round, total_points, round_points, points_per_game, ep_this, ep_next, 
-                                  minutes, goals_scored, assists, clean_sheets, goals_conceded, own_goals, penalties_saved, penalties_missed, 
-                                  yellow_cards, red_cards, saves, bonus, bps, influence, creativity, threat, ict_index, ea_index))
-  
-  return(data)
-  
-}
+# Get historic predictions and actual
+path <- './Project files/Data archive/'
 
-playerDetailed <- function(player_id) {
-  
-  # make the input numeric
-  player_id <- as.numeric(player_id)
-  
-  # get player list
-  players <- jsonlite::read_json("https://fantasy.premierleague.com/drf/bootstrap-static", simplifyVector = TRUE)
-  
-  # check the input is in range, stop if not
-  if (!player_id %in% 1:length(players$elements$id)) 
-    stop("player_id out of range.")
-  
-  # read in json player data, simplify vectors to make easy transfer to dataframe
-  data <- jsonlite::read_json(paste0("https://fantasy.premierleague.com/drf/element-summary/", player_id), simplifyVector = TRUE)
-  
-  # extract current seasons data ONLY, convert to tibble format
-  data <- tibble::as.tibble(data$history)
-  
-  if (length(data) < 1) 
-    stop("No player data for the current season, yet.")
-  
-  # replace codes with matching values
-  data$opponent_team <- with(players$teams, name[match(data$opponent_team, id)])
-  
-  # convert values to fpl-familiar style
-  data$price <- data$value/10
-  
-  # convert var types
-  data$influence <- as.numeric(data$influence)
-  data$creativity <- as.numeric(data$creativity)
-  data$threat <- as.numeric(data$threat)
-  data$ict_index <- as.numeric(data$ict_index)
-  
-  # append player id
-  data$player_id <- data$element
-  
-  data <- subset(data, select = -c(element, value))
-  
-  return(data)
-  
-}
+# Files
+files <- list.files(path)
 
-fpl <- players()
+# Load past predictions and details
+data <- do.call(rbind,
+                lapply(files, function(x) dplyr::select(readRDS(paste0(path, x)), id, web_name, xp, event_points, gw)))
 
-fpl.all <- lapply(sort(fpl$id), function(i) {
-  print(paste(i/max(fpl$id)))
-  return(playerDetailed(i))
+# Calculate the number of cores
+no_cores <- detectCores() - 1
+
+# Initiate cluster
+cl <- makeCluster(no_cores)
+
+# Include relevant variables and packages
+clusterEvalQ(cl, {
+  library(jsonlite)
+  library(dplyr)
+  library(ggplot2)
+  library(ggrepel)
+  library(engsoccerdata)
+  library(devtools)
+  library(fplr)
+  library(dplyr)
 })
 
-# Save
-fpl.all.2 <- do.call(rbind, fpl.all)
-saveRDS(fpl.all.2, 'fpl_all.rds')
+clusterExport(cl, "data")
 
-fpl.all.2 <- readRDS('fpl_all.rds')
+# Get all data for modelling. Now only takes around 1 minute!
+modeldata <- parLapply(cl, sort(unique(data$id)), playerDetailed)
+
+# Close cluster
+parallel::stopCluster(cl)
+
+# Append
+modeldata.2 <- do.call(rbind, modeldata)
+
+# Save
+modeldata.2 %>%
+  saveRDS('historic data to gw32.rds')
+
+# Player info
+players <- players() %>%
+  select(id, team_name, position)
 
 # Try looking at top scorers by fixture
-fpl.all.3 <- fpl.all.2 %>%
+modeldata.3 <- modeldata.2 %>%
   filter(minutes > 0) %>% # Only those that played
-  inner_join(dplyr::select(fpl, id, web_name, team_name, position), by= c("player_id"="id")) %>%
   group_by(player_id) %>%
   arrange(round) %>%
   mutate(bonus_lag = lag(bonus),
          bonus_lag = ifelse(is.na(bonus_lag), 0, bonus_lag)) %>%
   mutate(totalbonus = cumsum(bonus_lag)) %>%
-  arrange(player_id, round) %>%
-  group_by(fixture) %>%
-  mutate(raw_points = total_points - bonus) %>%
-  mutate(rank = dense_rank(desc(raw_points)), bonus2 = bonus) %>%
-  mutate(rank2 = ifelse(rank > 3, 4, rank)) %>%
   mutate(less60 = as.factor(ifelse(minutes < 60, 1, 0))) %>%
-  ungroup
+  ungroup %>%
+  inner_join(data, by = c("player_id"="id", "round"="gw")) %>%
+  group_by(fixture) %>%
+  mutate(rank = dense_rank(desc(xp))) %>%
+  group_by(fixture, opponent_team) %>%
+  mutate(bp_scale = scale(totalbonus)) %>%
+  ungroup %>%
+  inner_join(players, by=c("player_id"="id")) %>%
+  mutate(position=as.factor(position))
 
 # Plot
-fpl.all.3 %>%
-  ggplot(aes(x=rank2, y=bonus)) +
+modeldata.3 %>%
+  ggplot(aes(x=rank, y=bonus)) +
   geom_point(alpha = 0.2, colour = "dodgerblue4")
 
+# View
+modeldata.3 %>% arrange(fixture, rank) %>% View
+
 # Save
-fpl.all.3 %>%
-  dplyr::select(id, fixture, round, web_name, position, round, minutes, less60, goals_scored, assists, clean_sheets, totalbonus, raw_points, rank2, bonus) %>%
+modeldata.3 %>%
   saveRDS('bp_data.rds')
 
 # ---------------
 
-# load the library
-library(mlbench)
-library(caret)
-
 # Get data
-fpl.all.3 <- readRDS('bp_data.rds')
+modeldata.3 <- readRDS('bp_data.rds')
 
 # prepare training scheme
 control <- trainControl(method="repeatedcv", number=10, repeats=3)
 
 # train the glm model
-modelglm <- train(bonus ~ position*rank2 + position*assists + position*clean_sheets + totalbonus + less60,
-                  data=filter(fpl.all.3, round != 32), method="glm", trControl=control)
+modelglm <- train(bonus ~ position*rank + bp_scale,
+                  data=modeldata.3, method="glm", trControl=control)
 
 # modelrf <- train(bonus ~ position*rank2 + position*assists + position*clean_sheets + totalbonus,
 #                  data=filter(fpl.all.3, round != 32), method="rf", trControl=control)
@@ -174,7 +117,7 @@ summary(modelglm)
 modelglm$results
 
 # Test set results
-test <- filter(fpl.all.3, round == 32)
+test <- modeldata.3
 test$xbp <- ifelse(predict(modelglm, newdata=test) < 0, 0, predict(modelglm, newdata=test))
 
 # RMSE = 0.29. Very similar to training data (.3).
@@ -187,10 +130,10 @@ caret::R2(test$xbp,test$bonus)
 test %>%
   arrange(fixture, desc(xbp)) %>%
   mutate(xbp = round(xbp, 2)) %>%
+  select(fixture, web_name, position, total_points, xp, rank, bonus, xbp) %>%
   View
 
 # Does this ever disagree with the approach of just using their points rank within fixtures?
-fpl.all.3$xbp <- ifelse(predict(modelglm, newdata=fpl.all.3) < 0, 0, predict(modelglm, newdata=fpl.all.3))
 fpl.all.3 %>%
   group_by(fixture) %>%
   mutate(xrank = dense_rank(desc(xbp))) %>%

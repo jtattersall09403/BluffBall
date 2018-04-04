@@ -5,6 +5,7 @@ require(ggrepel)
 require(engsoccerdata)
 library(devtools)
 library(fplr)
+library(FLSSS)
 
 #--------------------------------------------------------------------------
 # getFPLSummary()
@@ -83,57 +84,50 @@ squadlegal <- function(team) {
 
 # ----------------------- Subsitution optimisation --------------------
 
-getBestTeam <- function (myteam2){
+
+# # data
+# data <- data.frame(id = 1:15,
+#                    pos = as.factor(c(1,1,
+#                            rep(2,5),
+#                            rep(3,5),
+#                            rep(4,3)))) %>%
+#   mutate(now_cost = round(rnorm(15, 66, 15), 1),
+#          xp = round(now_cost*runif(15, min = 0.05, max = 0.1), 2))
+# 
+# # Check
+# data
+
+getBestTeam <- function(data, pos = "pos") {
+  # formulate multidimensional vector
+  mV=as.data.frame(model.matrix(as.formula(paste("~", pos, "-1")), data))
   
-    # Get ids of first team and subs  
-    first <- myteam2[myteam2$position <= 11,]
-    subs <- myteam2[myteam2$position > 11,]
-    
-    # Get first team players with xp less than at least one sub
-    subs_potential <- first %>%
-      arrange(xp) %>%
-      slice(1:4) %>%
-      filter(xp < max(subs$xp))
-    first2 <- first[!first$element %in% subs_potential$element,]
-    
-    # Append to subs
-    subs2 <- rbind(subs, subs_potential)
-    
-    # All possibile combos
-    combns <- combn(subs2$element, nrow(subs_potential), simplify=T) %>% as.data.frame
-    
-    # Get best combination
-    xpbest <- 0
-    lapply(1:ncol(combns), function(x) {
-      team = rbind(first2, filter(subs2, element %in% combns[,x]))
-      
-      if (legal(team)) {
-        xp <- team %>% ungroup %>% summarise(xp = sum(xp)) %>% unlist
-      } else {
-        xp <- 0
-      }
-      
-      if (xp > xpbest) {
-        bestTeam <<- team
-        xpbest <<- xp
-      }
-      
-      #print(paste('Processed', x, 'of', ncol(combns)))
-    })
-    
-    
-    # Create team
-    myteam3 <- bestTeam %>%
-      mutate(order = case_when(pos == 'Goalkeeper' ~ 1,
-                               pos == 'Defender' ~ 2,
-                               pos == 'Midfielder' ~ 3,
-                               pos == 'Forward' ~ 4)) %>%
-      arrange(order)
-    
-    # Mark captain
-    myteam3 <- myteam3 %>% mutate(captain = ifelse(xp == max(myteam3$xp), 1, 0))
-    return(myteam3)
-}
+  # formulate lbound ubound
+  lbound=c(1, 3, 2, 1)
+  
+  # try if a portfolio with total expect value no less than 75% of the maximum
+  # can be found. Change "0.75" manually or in loop to detect the optimal
+  ubound=c(1, 5, 5, 3)
+  
+  # singleTimeLimit and tlimit shall be changed for heavier task. The 5s is
+  # merely for passing R package publish requirement
+  rst=mmFLknapsack(11, mV, lbound, ubound, totalSolutionNeeded = 1000, tlimit=5, randomizeTargetOrder = FALSE)
+  
+  # Which has higest xp?
+  index <- which.max(lapply(rst, function(x) sum(data[x, 'xp'])))
+  bestTeam = data[rst[[index]],]
+  
+  # Create team
+  myteam3 <- bestTeam %>%
+    mutate(order = case_when(pos == 'Goalkeeper' ~ 1,
+                             pos == 'Defender' ~ 2,
+                             pos == 'Midfielder' ~ 3,
+                             pos == 'Forward' ~ 4)) %>%
+    arrange(order)
+  
+  # Mark captain
+  myteam3 <- myteam3 %>% mutate(captain = ifelse(xp == max(myteam3$xp), 1, 0))
+  
+} 
 
 # Team after transfers
 transfers <- function(myteam2, fpl.3, trans_in, trans_out) {
@@ -187,6 +181,39 @@ pointssim <- function(x, teamdetails) {
   return(p)
 }
 
+# Define function to generate a team's points in one simulation
+pointssim <- function(x, teamdetails, n) {
+  
+  x <- teamdetails %>% filter(element == x) %>%
+    mutate(goalprob.y = goalprob/(1-prob0),
+           goalprob1 = goalprob1/(1-prob0),
+           probBrace = probBrace/(1-prob0),
+           probHt = probHt/(1-prob0))
+  
+  # Appearances
+  ap <- sample(0:2, n, prob=c(x$prob0, x$probless60, x$prob60), replace = TRUE)
+  
+  # Team clean sheets
+  tcs <- sample(0:1, n, prob=c(1-x$cs, x$cs), replace = TRUE) * points$cleansheet[match(x$pos.x, points$pos)]
+  
+  # Player clean sheets
+  cs <- ifelse(ap > 1, tcs, 0)
+  
+  # Assists
+  as.1 <- sample(0:1, n, prob=c(1-x$probas, x$probas), replace = TRUE) * 3
+  as <- ifelse(ap > 0, as.1, 0)
+  
+  # Goals
+  g1 <- sample(0:3, n,
+               prob=c(1-x$goalprob.y, x$goalprob1, x$probBrace, x$probHt), replace = TRUE) * points$goal[match(x$pos.x, points$pos)]
+  g <- ifelse(ap == 0, 0, g1)
+  
+  # Total points
+  p <- cbind(ap, cs, as, g) %>%
+    rowSums() * (x$captain + 1)
+  
+  return(p)
+}
 
 # Define function to draw team formation
 teamvis <- function(myteam2) {
