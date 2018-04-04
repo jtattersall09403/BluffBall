@@ -23,30 +23,52 @@ bank <- 1000 - sum(dt.1$now_cost)
 bank
 
 while (bank < 0 | squadlegal(dt.1) == F) {
+  #Which teams are ineligible for transfers in?
+  t.i <- dt.1 %>%
+    group_by(team) %>%
+    summarise(num = n()) %>%
+    filter(num >= 3) %>%
+    arrange(desc(num))
+  
   # Find least bad transfer
-  t <- dt.1 %>%
-    ungroup %>%
-    inner_join(select(fpl.3, id, web_name, pos, now_cost, xp), by = 'pos') %>%
-    filter(!id.y %in% dt.1$id) %>%
-    mutate(pricediff = now_cost.x - now_cost.y,
-           xpdiff = xp.x - xp.y) %>%
-    filter(pricediff > 0) %>%
-    arrange(xpdiff) %>%
-    slice(1) %>%
-    select(id.x, id.y)
+    t <- dt.1 %>%
+      ungroup %>%
+      inner_join(select(fpl.3, id, web_name, pos, team, now_cost, xp), by = 'pos') %>%
+      filter(!id.y %in% dt.1$id) %>%
+      mutate(pricediff = now_cost.x - now_cost.y,
+             xpdiff = xp.x - xp.y)
+    
+    # If too many players from one team, transfer them out first. Otherwise, make least bad transfer.
+    if (squadlegal(dt.1)) {
+      t <- t %>%
+        filter(pricediff > 0, !team.y %in% t.i$team) %>%
+        arrange(xpdiff) %>%
+        slice(1) %>%
+        select(id.x, id.y)
+    } else {
+      t <- t %>%
+        filter(team.x == t.i$team[1]) %>%
+        #filter(pricediff + bank > 0, !team.y %in% t.i$team) %>%
+        filter(!team.y %in% t.i$team) %>%
+        arrange(xpdiff) %>%
+        slice(1) %>%
+        select(id.x, id.y)
+    }
+
+    
+    # Update team
+    dt.1 <- dt.1 %>%
+      filter(id != t$id.x) %>%
+      union(select(filter(fpl.3, id == t$id.y), pos, team, id, web_name, now_cost, xp)) %>%
+      arrange(pos)
+    
+    # Update bank
+    bank <- 1000 - sum(dt.1$now_cost)
+    
+    # Repeat until affordable 
+    print(paste0('Iteration ', i, ', Out: ', fpl.3$web_name[fpl.3$id == t$id.x], ', In: ', fpl.3$web_name[fpl.3$id == t$id.y], ', Bank:', bank))
+    i = i + 1
   
-  # Update team
-  dt.1 <- dt.1 %>%
-    filter(id != t$id.x) %>%
-    union(select(filter(fpl.3, id == t$id.y), pos, team, id, web_name, now_cost, xp)) %>%
-    arrange(pos)
-  
-  # Update bank
-  bank <- 1000 - sum(dt.1$now_cost)
-  
-  # Repeat until affordable 
-  print(paste0('Iteration ', i, ', Out: ', fpl.3$web_name[fpl.3$id == t$id.x], ', In: ', fpl.3$web_name[fpl.3$id == t$id.y], ', Bank:', bank))
-  i = i + 1
 }
 
 
@@ -226,7 +248,7 @@ while(nrow(t) > 0) {
     # need to sell to free up a squad spot for it. It looks at who you could bring in for them,
     # and the total xp cost/benefit and cash cost/benefit of doing so. If it's a good trade, it makes it.
     tmp <- t.1 %>%
-      mutate(legal = ifelse(team.y %in% t.i$team, 0, 1)) %>%
+      mutate(legal = ifelse(team.y %in% t.i$team | team.y==team.x, 0, 1)) %>%
       inner_join(dt.2.2, by = c('team.y'='team')) %>%
       inner_join(select(fpl.3, id, team, web_name, pos, now_cost, xp), by = c('pos.y'='pos')) %>%
       filter(!id.y %in% dt.2.2$element,

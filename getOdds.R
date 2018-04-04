@@ -13,6 +13,7 @@ getOdds <- function (url, teams) {
   players_data <- players_data[!players_data %in% teams]
   players_data <- substr(players_data, 1, nchar(players_data) - 2)
   players_data <- players_data[players_data != '']
+  players_data <- players_data[!grepl("\\n", players_data)]
   
   #Using CSS selectors to scrap the rankings section
   odds_html <- html_nodes(webpage,'.eventprice')

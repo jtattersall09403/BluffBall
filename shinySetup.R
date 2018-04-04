@@ -9,6 +9,7 @@ library(parallel)
 
 source('./GetFPLData.R')
 source('./getOdds.R')
+source('./Dreamteam/Dreamteam - recursive v2.R')
 
 # Pick up previous data
 load('.RData')
@@ -36,8 +37,8 @@ if(!identical(dt.all[[n]]$element, dt.3$element)) {
 }
 
 # Show total points
-dt.last.2
-sum(dt.last.2[1:11,'event_points'])
+dt.all[[n]]
+sum(dt.all[[n]][1:11,'event_points'])
 
 # -------------------------------------- Goalscorer odds -----------------------
 
@@ -247,9 +248,14 @@ fpl.3 <- fpl.2 %>%
          xpcs = prob60 * cs * cleansheet,
          xpas = prob60 * probas * 3) %>%
   mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs, ifelse(is.na(xpas),0,xpas)) %>%
-  mutate(xp = ifelse(prob60 == 0, 0, xp)) %>% # Set to 0 if not predicted to play
-  mutate(xp = ifelse(is.na(goalprob), as.numeric(ep_next), xp)) # Set to modelled value if goal odds not present.
+  mutate(xp = ifelse(prob60 == 0, 0, xp)) #%>% # Set to 0 if not predicted to play
+  #mutate(xp = ifelse(is.na(goalprob), as.numeric(ep_next), xp)) # Set to modelled value if goal odds not present.
 
+# Show ep for those whose goalscorer odds are missing
+# fpl.3 %>%
+#   filter(pos != 'Goalkeeper', (is.na(goalprob) | is.na(prob60))) %>%
+#   select(web_name, team, goalprob, prob60, xp) %>%
+#   arrange(desc(prob60)) %>% View
 
 # Get all fpl pairs
 fpl.3$dum <- 1
@@ -274,6 +280,7 @@ fplsquad <- fplsquad[!duplicated(data.frame(t(apply(fplsquad[,c(1,2)], 1, sort))
 # Get dreamteam
 source('./Dreamteam/Dreamteam - recursive.R')
 sum(dt.3[1:11,'xp'])
+sum(dt.3['now_cost'])
 
 # Remove unnecessary objects
 rm(list = c('cs',

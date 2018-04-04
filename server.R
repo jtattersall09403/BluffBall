@@ -22,6 +22,7 @@ load('.RData')
 # Get functions
 source('GetFPLData.R')
 source('getOdds.R')
+source('userPicks.R')
 
 # Define server logic
 shinyServer(function(input, output) {
@@ -110,7 +111,7 @@ shinyServer(function(input, output) {
     # Get current squad
     #  4880044, 1978879
     teamid <- substr(input$teamid, 34, 40)
-    myteam.a <- userPicks(user_id = teamid, gameweek = as.integer(input$gw))
+    myteam.a <- userPicks2(user_id = as.integer(teamid), gameweek = as.integer(input$gw))
     myteam <- myteam.a %>%
       dplyr::select(position, player_name, price, element) %>%
       mutate(price = price * 10)
@@ -165,8 +166,10 @@ shinyServer(function(input, output) {
     showNotification('Optimising team...')
     
     # Optimise team
-    myteam3 <- getBestTeam(myteam2())
+    myteam2 <- myteam2()
+    myteam3 <- getBestTeam(myteam2)
     
+    return(myteam3)
   })
   
   # View optimised team
@@ -563,7 +566,8 @@ shinyServer(function(input, output) {
     dt.last.2 %>%
       mutate(Points = round(event_points,1)) %>%
       select(-captain, -event_points) %>%
-      as.data.frame
+      as.data.frame %>%
+      mutate(xp = round(xp, 2))
   }, options = list(pageLength = 11, scrollX = TRUE))
   
   
