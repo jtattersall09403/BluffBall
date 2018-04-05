@@ -89,8 +89,8 @@ View(filter(arrange(fpl.4, desc(form)), is.na(Pts)))
 # Get dreamteams - full hedge
 dt <- list()
 dt[[1]] <- dreamteam(fpl.4)
-dt[[2]] <- dreamteam(filter(fpl.4, !id %in% dt[[1]]$element))
-dt[[3]] <- dreamteam(filter(fpl.4, !id %in% dt[[1]]$element, !id %in% dt[[2]]$element))
+# dt[[2]] <- dreamteam(filter(fpl.4, !id %in% dt[[1]]$element))
+# dt[[3]] <- dreamteam(filter(fpl.4, !id %in% dt[[1]]$element, !id %in% dt[[2]]$element))
 
 # Try captain hedge
 dt[[1]]
@@ -112,7 +112,7 @@ for (i in 1:length(dt)) print(sum(dt[[i]][1:11, 'xp']))
 teamdetails <- lapply(1:length(dt), function(i) inner_join(dt[[i]], fpl.3, by = c('element'='id')))
 
 # Simulate points for each player
-teamsim <- lapply(1:length(dt), function(i) rowSums(do.call(cbind, lapply(teamdetails[[i]]$element[1:11], pointssim, teamdetails[[i]]))))
+teamsim <- lapply(1:length(dt), function(i) rowSums(do.call(cbind, lapply(teamdetails[[i]]$element[1:11], pointssim, teamdetails[[i]], 5000))))
 
 # Visualise probabilities
 teamsim[[1]] %>%
@@ -133,15 +133,26 @@ sample(unique(teamsim[[1]]), 1, prob=weights[[1]], replace = TRUE)
 pointsim <- function(y, maxent, n, compdat) {
   
   # Your points
-  dtp = round(sapply(1:maxent, function(i) sample(unique(teamsim[[i]]), 1, prob=weights[[i]], replace = TRUE)), 0)
+  #dtp = round(sapply(1:maxent, function(i) sample(unique(teamsim[[i]]), 1, prob=weights[[i]], replace = TRUE)), 0)
   
+  # Get simulated points
+  sim <- do.call(rbind, lapply(teamdetails[[1]]$element[1:11], pointssim, teamdetails[[1]], 1))
+  dtp.tot <- sapply(1:maxent, function(i) sum(sim*(dt[[i]]$captain[1:11]+1)))
+  
+  # Get profits
   results <- sapply(1:nrow(compdat), function(i) {
     
     # Generate other points. Assume they're as good as your best team.
     pts <- round(sample(unique(teamsim[[1]]), compdat$entries[i], prob=weights[[1]], replace = TRUE),0)
+    # pts <- sapply(1:compdat$entries[i], function(x){
+    #   sim = do.call(rbind, lapply(teamdetails[[1]]$element[1:11], pointssim, teamdetails[[1]], 1))
+    #   sim = sim * (dtp[[1]]$captain+1)
+    #   print(x/compdat$entries[i])
+    #   sum(sim)
+    # })
     
     # Get return
-    r <- prizes[[i]][rank(-append(dtp,pts), ties.method = "first")[1:maxent]]
+    r <- prizes[[i]][rank(-append(dtp.tot,pts), ties.method = "first")[1:maxent]]
     r <- ifelse(is.na(r), 0, r) - compdat$fees[i]
     r <- sum(r)
     r
@@ -153,7 +164,7 @@ pointsim <- function(y, maxent, n, compdat) {
   # Headers
   names(results) <- paste0(compdat$comps, ' x', maxent)
   
-  if(y %% 50 == 0) print(paste('Processed', y, 'of', n))
+  if(y %% 10 == 0) print(paste('Processed', y, 'of', n))
   
   return(results)
 }

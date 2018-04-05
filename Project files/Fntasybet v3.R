@@ -35,7 +35,7 @@ prizes <- list(c(1000,
 compdat <- data.frame(comps, entries, fees, stringsAsFactors = FALSE)
 
 # Set parameters
-n <- 2000
+n <- 500
 maxent <- 3
 
 # Simulate
@@ -76,6 +76,8 @@ profitdat.2 <- do.call(rbind, profitdat)
 # See the results
 options(digits=2)
 View(arrange(profitdat.2, desc(round(greater_0,2)), desc(min), desc(exp)))
+
+saveRDS(profitdat.2, './Project files/profitdat_gw33')
 
 # Experiment with overall rating
 res2 <- profitdat.2 %>%

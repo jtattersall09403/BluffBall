@@ -148,38 +148,38 @@ transfers <- function(myteam2, fpl.3, trans_in, trans_out) {
 }
 
 # Define points sim function
-pointssim <- function(x, teamdetails) {
-  
-  x <- teamdetails %>% filter(element == x) %>%
-    mutate(goalprob.y = goalprob/(1-prob0),
-           goalprob1 = goalprob1/(1-prob0),
-           probBrace = probBrace/(1-prob0),
-           probHt = probHt/(1-prob0))
-  
-  # Appearances
-  ap <- sample(0:2, 50000, prob=c(x$prob0, x$probless60, x$prob60), replace = TRUE)
-  
-  # Team clean sheets
-  tcs <- sample(0:1, 50000, prob=c(1-x$cs, x$cs), replace = TRUE) * points$cleansheet[match(x$pos.x, points$pos)]
-  
-  # Player clean sheets
-  cs <- ifelse(ap > 1, tcs, 0)
-  
-  # Assists
-  as.1 <- sample(0:1, 50000, prob=c(1-x$probas, x$probas), replace = TRUE) * 3
-  as <- ifelse(ap > 0, as.1, 0)
-  
-  # Goals
-  g1 <- sample(0:3, 50000,
-              prob=c(1-x$goalprob.y, x$goalprob1, x$probBrace, x$probHt), replace = TRUE) * points$goal[match(x$pos.x, points$pos)]
-  g <- ifelse(ap == 0, 0, g1)
-  
-  # Total points
-  p <- cbind(ap, cs, as, g) %>%
-    rowSums() * (x$captain + 1)
-  
-  return(p)
-}
+# pointssim <- function(x, teamdetails) {
+#   
+#   x <- teamdetails %>% filter(element == x) %>%
+#     mutate(goalprob.y = goalprob/(1-prob0),
+#            goalprob1 = goalprob1/(1-prob0),
+#            probBrace = probBrace/(1-prob0),
+#            probHt = probHt/(1-prob0))
+#   
+#   # Appearances
+#   ap <- sample(0:2, 50000, prob=c(x$prob0, x$probless60, x$prob60), replace = TRUE)
+#   
+#   # Team clean sheets
+#   tcs <- sample(0:1, 50000, prob=c(1-x$cs, x$cs), replace = TRUE) * points$cleansheet[match(x$pos.x, points$pos)]
+#   
+#   # Player clean sheets
+#   cs <- ifelse(ap > 1, tcs, 0)
+#   
+#   # Assists
+#   as.1 <- sample(0:1, 50000, prob=c(1-x$probas, x$probas), replace = TRUE) * 3
+#   as <- ifelse(ap > 0, as.1, 0)
+#   
+#   # Goals
+#   g1 <- sample(0:3, 50000,
+#               prob=c(1-x$goalprob.y, x$goalprob1, x$probBrace, x$probHt), replace = TRUE) * points$goal[match(x$pos.x, points$pos)]
+#   g <- ifelse(ap == 0, 0, g1)
+#   
+#   # Total points
+#   p <- cbind(ap, cs, as, g) %>%
+#     rowSums() * (x$captain + 1)
+#   
+#   return(p)
+# }
 
 # Define function to generate a team's points in one simulation
 pointssim <- function(x, teamdetails, n) {
@@ -210,7 +210,7 @@ pointssim <- function(x, teamdetails, n) {
   
   # Total points
   p <- cbind(ap, cs, as, g) %>%
-    rowSums() * (x$captain + 1)
+    rowSums()
   
   return(p)
 }
