@@ -14,6 +14,9 @@ source('./Dreamteam/Dreamteam - recursive v2.R')
 # Pick up previous data
 load('.RData')
 
+# Set upcoming gw
+gw <- 34
+
 # ----------------- FPL data ---------------
 
 # Get player and team data
@@ -45,7 +48,6 @@ if(!identical(dt.all[[n]]$element, dt.3$element)) {
 
 # Show total points
 n <- length(dt.all)
-dt.all[[n]]
 sum(dt.all[[n]][1:11,'event_points'])
 
 # -------------------------------------- Goalscorer odds -----------------------
@@ -254,6 +256,7 @@ source('./startprob.R')
 # Check how many have odds available
 fpl.2 <- fpl.1
 print(c(paste0(100*round(sum(!is.na(fpl.2$goalprob))/nrow(fpl.2[fpl.2$pos != 'Goalkeeper',]),3), '% of players have goalscorer odds'),
+        paste0(100*round(sum(fpl.2$probas>0)/nrow(fpl.2[fpl.2$pos != 'Goalkeeper',]),3), '% of players have assist predictions > 0'),
         paste0(100*round(sum(!is.na(fpl.2$cs))/nrow(fpl.2),3), '% of players have clean sheet odds'),
         paste0(100*round(sum(!is.na(fpl.2$prob60))/nrow(fpl.2),3), '% of players have a playing time prediction')))
 
@@ -275,8 +278,7 @@ fpl.3 <- fpl.2 %>%
   mutate(points_per_game = as.numeric(points_per_game)) %>%
   mutate(games = total_points/points_per_game,
          prob60 = prob60) %>%
-  mutate(probas = as.numeric(assists)/as.numeric(games),
-         prob0 = .2 * (1-prob60),
+  mutate(prob0 = .2 * (1-prob60),
          probless60 = .8 * (1-prob60)) %>%
   mutate(prob60 = ifelse(prob60 < 0.08, 0, prob60)) %>%
   mutate(prob60 = ifelse(as.numeric(ep_next) <= 0, 0, prob60)) %>% # Set probability of playing to 0 if no fixture
@@ -287,9 +289,8 @@ fpl.3 <- fpl.2 %>%
          xgp = xgp1 + xgp2 + xgp3) %>%
   mutate(xm = ifelse(is.na(xm), 0, xm)) %>%
   mutate(xpap = ifelse(xm >= 60, 2, ifelse(xm > 0, 1, 0)),
-         xpcs = prob60 * cs * cleansheet,
-         xpas = prob60 * probas * 3) %>%
-  mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs, ifelse(is.na(xpas),0,xpas)) %>%
+         xpcs = prob60 * cs * cleansheet) %>%
+  mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs + ifelse(is.na(xpas),0,xpas)) %>%
   mutate(xp = ifelse(prob60 == 0, 0, xp)) #%>% # Set to 0 if not predicted to play
   #mutate(xp = ifelse(is.na(goalprob), as.numeric(ep_next), xp)) # Set to modelled value if goal odds not present.
 
