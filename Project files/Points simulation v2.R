@@ -114,12 +114,12 @@ dt.details <- inner_join(dt[[1]], fpl.3, by = c('element'='id'))
 # Get dreamteam based on most popular targets. Make a decision on whether you
 # should be maximising overall demand, or demand within positions. Probably the former.
 # Get player and team data
-fpldat <- getFPLSummary()
+# fpldat <- getFPLSummary()
 
 # Set weight for current ownership
 m <- 0
 
-dt_other <- fpldat %>%
+dt_other <- fpl.4 %>%
   #group_by(pos) %>%
   mutate(trans_balance = transfers_in_event - transfers_out_event) %>%
   mutate(trans_scale = as.numeric(scale(trans_balance)),
