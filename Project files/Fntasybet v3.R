@@ -7,7 +7,7 @@ source('./Project files/Points simulation v2.R')
 
 # Competitions
 comps <- c('grand', 'strike', 'coin', 'double')
-entries <- c(150, 37, 50, 4)
+entries <- c(150, 37, 50, 12)
 fees <- c(33, 3.3, 1.1, 11)
 prizes <- list(c(1000,
                  500,
@@ -30,13 +30,13 @@ prizes <- list(c(1000,
                  3.75,
                  2.88,
                  2.25),
-               c(22,22))
+               c(rep(22, entries[4]/2)))
 
 compdat <- data.frame(comps, entries, fees, stringsAsFactors = FALSE)
 
 # Set parameters
 n <- 500
-maxent <- 3
+maxent <- 2
 
 # Simulate
 results <- do.call(cbind, lapply(1:maxent,function(maxent) 
@@ -106,3 +106,5 @@ data.frame(profit = outcomes[[81]]) %>% ggplot(aes(profit)) +
   geom_histogram(colour = 'dodgerblue4', fill = 'dodgerblue', binwidth = 20)
 
 View(outcomes[[132]])
+
+# --------------------- Experimental --------------

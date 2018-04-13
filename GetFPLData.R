@@ -125,7 +125,8 @@ getBestTeam <- function(data, pos = "pos") {
     arrange(order)
   
   # Mark captain
-  myteam3 <- myteam3 %>% mutate(captain = ifelse(xp == max(myteam3$xp), 1, 0))
+  myteam3 <- myteam3 %>% ungroup %>% mutate(rank2 = row_number(desc(xp))) %>%
+    mutate(captain = ifelse(rank2 == 1, 1, 0)) %>% select(-rank2)
   
 } 
 
@@ -184,6 +185,7 @@ transfers <- function(myteam2, fpl.3, trans_in, trans_out) {
 # Define function to generate a team's points in one simulation
 pointssim <- function(x, teamdetails, n) {
   
+  x[is.na(x)] <- 0
   x <- teamdetails %>% filter(element == x) %>%
     mutate(goalprob.y = goalprob/(1-prob0),
            goalprob1 = goalprob1/(1-prob0),
@@ -277,17 +279,25 @@ autosub <- function(dt.last) {
   # Auto subs
   dt.last$order <- 1:15
   dt.last$dum <- 1
-  autosubs <- dt.last[1:11,] %>%
-    group_by(pos) %>%
+  dt.last$first11 <- c(rep(1,11), rep(0,4))
+  autosubs.1 <- dt.last %>%
+    group_by(pos, first11) %>%
     mutate(numpos = n()) %>%
     mutate(minperpos = case_when(pos == 'Goalkeeper' ~ 1,
                                  pos == 'Defender' ~ 3,
                                  pos == 'Midfielder' ~ 2,
                                  pos == 'Forward' ~ 1),
-           minpos = ifelse(numpos == minperpos, 1, 0)) %>%
+           maxperpos = case_when(pos == 'Goalkeeper' ~ 1,
+                                 pos == 'Defender' ~ 5,
+                                 pos == 'Midfielder' ~ 5,
+                                 pos == 'Forward' ~ 3),
+           minpos = ifelse(numpos == minperpos, 1, 0),
+           maxpos = ifelse(numpos == maxperpos, 1, 0))
+  
+  autosubs <- autosubs.1[1:11,] %>% 
     filter(event_points == 0) %>%
-    left_join(dt.last[12:15,], by = 'dum') %>%
-    filter(pos.x == pos.y | minpos == 0) %>%
+    left_join(autosubs.1[12:15,], by = 'dum') %>% 
+    filter(pos.x == pos.y | (minpos.x == 0 & maxpos.y == 0)) %>%
     filter(event_points.y > 0) %>%
     arrange(order.y) %>%
     ungroup %>%

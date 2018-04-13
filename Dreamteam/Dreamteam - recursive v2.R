@@ -142,7 +142,7 @@ dreamteam <- function(data, budget = 1000)  {
   
   first11 <- getBestTeam(dt.2) %>% select(-order, -position)
   
-  dt.2.1 <- rbind(first11, select(filter(dt.2, !element %in% first11$element), element, pos, team, web_name, now_cost, xp, rank, captain)) %>%
+  dt.2.1 <- union(first11, select(filter(dt.2, !element %in% first11$element), element, pos, team, web_name, now_cost, xp, rank, captain)) %>%
     mutate(web_name = ifelse(captain ==1, paste0(web_name, ' (C)'), web_name),
            xp = ifelse(captain == 1, round(xp * 2,1), round(xp,1)))
   

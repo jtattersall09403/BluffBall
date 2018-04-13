@@ -21,7 +21,25 @@ mdl <- fpl.3 %>%
   mutate(last_event_points = event_points.x,
          event_points = event_points.y)
 
-# How close was expected points to actual points summed over the whole gameweek?
+# Record gw
+mdl$gw <- 33
+
+# Save data
+saveRDS(mdl, paste0('./Project files/Data archive/gw', gw, '.rds'))
+
+
+# Get historic predictions and actual
+path <- './Project files/Data archive/'
+
+# Files
+files <- list.files(path)
+
+# Load past predictions and details
+mdl <- do.call(rbind,
+                lapply(files, function(x) dplyr::select(readRDS(paste0(path, x)), id, web_name, xp, event_points, gw)))
+
+
+# How close is expected points to actual points summed over all gameweek's so far?
 sum(mdl$xp, na.rm=TRUE)
 sum(mdl$event_points)
 
@@ -30,14 +48,14 @@ hist(mdl$event_points[mdl$event_points!=0])
 hist(mdl$xp[mdl$event_points!=0])
 
 # Excluding zeroes
-mdl %>% filter(event_points != 0) %>% select(-web_name) %>% melt(id.vars = 'id') %>%
+mdl %>% filter(event_points != 0) %>% select(-web_name, -gw) %>% melt(id.vars = 'id') %>%
   ggplot(aes(value, group = variable, fill = variable)) +
   geom_density(alpha = 0.5) +
   theme_minimal() +
   scale_fill_viridis(discrete = T,  begin = 0.8, end = 0.3)
 
 # Including zeroes
-mdl %>% select(-web_name) %>% melt(id.vars = 'id') %>%
+mdl %>% select(-web_name, -gw) %>% melt(id.vars = 'id') %>%
   ggplot(aes(value, group = variable, fill = variable)) +
   geom_density(alpha = 0.5) +
   theme_minimal() +
@@ -79,14 +97,9 @@ data.frame(mdl$xp, res, mdl$web_name) %>%
 # RMSE
 sqrt(mean(res^2,na.rm=T))
 
-# R square
+# R square: .31 for gameweeks 31-33
 caret::R2(mdl$xp, mdl$event_points, na.rm = T)
 
-# Record gw
-mdl$gw <- 32
-
-# Save data
-saveRDS(mdl, './Project files/Data archive/gw32.rds')
 
 # --------------- Dreamteam performance -------------
 

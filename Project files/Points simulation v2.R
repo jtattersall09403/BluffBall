@@ -108,26 +108,65 @@ dt[[3]] <- dt[[1]] %>%
 # Check all expected points
 for (i in 1:length(dt)) print(sum(dt[[i]][1:11, 'xp']))
 
+# Match on other details
+dt.details <- inner_join(dt[[1]], fpl.3, by = c('element'='id'))
+  
+# Get dreamteam based on most popular targets. Make a decision on whether you
+# should be maximising overall demand, or demand within positions. Probably the former.
+# Get player and team data
+fpldat <- getFPLSummary()
+
+# Set weight for current ownership
+m <- 0
+
+dt_other <- fpldat %>%
+  #group_by(pos) %>%
+  mutate(trans_balance = transfers_in_event - transfers_out_event) %>%
+  mutate(trans_scale = as.numeric(scale(trans_balance)),
+         own_scale = as.numeric(scale(as.numeric(selected_by_percent)))) %>%
+  ungroup %>%
+  mutate(trans_scale = ifelse(is.na(trans_scale), 0, trans_scale),
+         own_scale = ifelse(is.na(own_scale), 0, own_scale)) %>%
+  mutate(#xpoints = xp,
+         xp = trans_scale + (own_scale*m)) %>%
+  filter(xp > 0) %>%
+  arrange(desc(xp)) %>%
+  dreamteam()
+
+# Match names etc
+dt_other <- dt_other %>% select(-xp, -web_name) %>%
+  inner_join(select(fpl.3, id, web_name, xp, goalprob), by = c("element"="id")) %>%
+  mutate(goalprob = ifelse(is.na(goalprob), 0, goalprob),
+         xp = ifelse(is.na(xp), 0, xp)) %>%
+  mutate(captain = ifelse(goalprob == max(.$goalprob, na.rm = T), 1, 0)) %>%
+  mutate(xp = ifelse(captain==1, xp*2, xp)) %>%
+  mutate(web_name = ifelse(captain==1, paste(web_name, "(C)"), web_name)) %>%
+  select(element, pos, team, web_name, now_cost, xp, captain)
+dt_other
+sum(dt_other$now_cost)
+sum(dt_other$xp[1:11])
+
 # Match on all details
-teamdetails <- lapply(1:length(dt), function(i) inner_join(dt[[i]], fpl.3, by = c('element'='id')))
+teamdetails <- inner_join(dt_other, fpl.3, by = c('element'='id'))
+teamdetails[is.na(teamdetails)] <- 0
 
 # Simulate points for each player
-teamsim <- lapply(1:length(dt), function(i) rowSums(do.call(cbind, lapply(teamdetails[[i]]$element[1:11], pointssim, teamdetails[[i]], 5000))))
+teamsim.1 <- lapply(teamdetails$element[1:11], pointssim, teamdetails, 5000)
+teamsim.2 <- lapply(1:length(teamsim.1), function(i) teamsim.1[[i]] * (dt_other$captain+1)[i] ) 
+teamsim <- rowSums(do.call(cbind, teamsim.2))
 
 # Visualise probabilities
-teamsim[[1]] %>%
+teamsim %>%
   as.data.frame %>%
   ggplot(aes(x=`.`)) +
-  geom_histogram(fill = 'dodgerblue3', color = 'dodgerblue4', bins = 30)
-
-# # Stats
-for (i in 1:length(dt)) print(mean(teamsim[[i]]))
+  #geom_histogram(fill = 'dodgerblue3', color = 'dodgerblue4', bins = 30)
+  geom_density(fill = 'dodgerblue3', color = 'dodgerblue4')
 
 # Get probability of each possible number of points
-weights <- lapply(1:length(dt), function(i) as.numeric(table(teamsim[[i]])/length(teamsim[[i]])))
+weights <- as.numeric(table(teamsim)/length(teamsim))
 
 # This generates a score randomly according to the distrubtion of total points
-sample(unique(teamsim[[1]]), 1, prob=weights[[1]], replace = TRUE)
+# sample(unique(teamsim[[1]]), 1, prob=weights[[1]], replace = TRUE)
 
 # Sim function
 pointsim <- function(y, maxent, n, compdat) {
@@ -136,23 +175,19 @@ pointsim <- function(y, maxent, n, compdat) {
   #dtp = round(sapply(1:maxent, function(i) sample(unique(teamsim[[i]]), 1, prob=weights[[i]], replace = TRUE)), 0)
   
   # Get simulated points
-  sim <- do.call(rbind, lapply(teamdetails[[1]]$element[1:11], pointssim, teamdetails[[1]], 1))
+  sim <- do.call(rbind, lapply(dt.details$element[1:11], pointssim, dt.details, 1))
   dtp.tot <- sapply(1:maxent, function(i) sum(sim*(dt[[i]]$captain[1:11]+1)))
   
   # Get profits
   results <- sapply(1:nrow(compdat), function(i) {
     
-    # Generate other points. Assume they're as good as your best team.
-    pts <- round(sample(unique(teamsim[[1]]), compdat$entries[i], prob=weights[[1]], replace = TRUE),0)
-    # pts <- sapply(1:compdat$entries[i], function(x){
-    #   sim = do.call(rbind, lapply(teamdetails[[1]]$element[1:11], pointssim, teamdetails[[1]], 1))
-    #   sim = sim * (dtp[[1]]$captain+1)
-    #   print(x/compdat$entries[i])
-    #   sum(sim)
-    # })
+    # Generate other points.
+    pts <- round(sample(unique(teamsim), compdat$entries[i], prob=weights, replace = TRUE),0)
+    pts
     
     # Get return
-    r <- prizes[[i]][rank(-append(dtp.tot,pts), ties.method = "first")[1:maxent]]
+    if (compdat$comps[i]=="double") prizes[[i]] <- c(rep(compdat$fees[i]*2, (compdat$entries[i] + maxent)/2))
+    r <- prizes[[i]][rank(-append(dtp.tot,pts), ties.method = "average")[1:maxent]]
     r <- ifelse(is.na(r), 0, r) - compdat$fees[i]
     r <- sum(r)
     r
@@ -164,7 +199,8 @@ pointsim <- function(y, maxent, n, compdat) {
   # Headers
   names(results) <- paste0(compdat$comps, ' x', maxent)
   
-  if(y %% 10 == 0) print(paste('Processed', y, 'of', n))
+  # Progress
+  print(paste('Processed', y, 'of', n))
   
   return(results)
 }
