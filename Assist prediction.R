@@ -24,10 +24,10 @@ fpl.all.2 <- readRDS('fpl_all.rds')
 fixtures <- fixtures()
 teams <- teams()
 
-# Define number of previuos games to look at
+# Define number of previous games to look at
 n <- ifelse(max(fpl.all.2$round) > 5, 5, max(fpl.all.2$round))
 
-# Derive predictor variables. Use rounds prior to 33 - 33 will be used for testing.
+# Derive predictor variables.
 modeldata.1 <- fpl.all.2 %>%
   inner_join(dplyr::select(fpl, id, web_name, position, team_name), by = c("player_id"="id")) %>%
   inner_join(dplyr::select(teams, name, strength_overall_home:strength_defence_away), by = c("team_name"="name")) %>%

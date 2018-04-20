@@ -5,9 +5,9 @@ account: dialjsas-jt
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 290969
-bundleId: 1316920
+bundleId: 1317701
 url: https://fantasyfootball.shinyapps.io/BluffBall/
-when: 1523609129.54046
+when: 1523644110.67012
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: bp_data.rds|bp_data_v2.rds|general bp per outcome full 17-18 season to gw 32.RDS|historic data to gw32.rds|historic data to gw33.rds|shinySetup.R|startprob.R|Dreamteam/Dreamteam - recursive v2.R|Dreamteam/Dreamteam - recursive.R|Archive|Pictures|Project files
+ignoredFiles: Assist prediction.R|bp_data.rds|bp_data_v2.rds|gbm_assist_model.RDS|general bp per outcome full 17-18 season to gw 32.RDS|historic data to gw32.rds|historic data to gw33.rds|shinySetup.R|startprob.R|startprob.rds|Dreamteam/Dreamteam - recursive v2.R|Dreamteam/Dreamteam - recursive.R|Archive|Pictures|Project files

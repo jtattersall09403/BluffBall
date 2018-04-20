@@ -28,7 +28,7 @@ players.2 = players()
 details <- function(id) {
   tryCatch({
     # get player details
-    x = playerDetailed(id) %>%
+    x = playerDetailed2(id, plyrs) %>%
       inner_join(dplyr::select(players.2, id, web_name, position, team_name), by = c("player_id"="id")) %>%
       inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("team_name"="name")) %>%
       inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("opponent_team"="name")) %>%
@@ -92,37 +92,38 @@ details <- function(id) {
 }
 
 # Calculate the number of cores
-no_cores <- detectCores() - 1
-
-# Initiate cluster
-cl <- makeCluster(no_cores)
-
-# Include relevant variables and packages
-clusterEvalQ(cl, {
-   library(jsonlite)
-   library(dplyr)
-   library(ggplot2)
-   library(ggrepel)
-   library(engsoccerdata)
-   library(devtools)
-   library(fplr)
-   library(dplyr)
-   library(reshape2)
-   library(TTR)
-   library(RcppRoll)
-   geomSeries <- function(base, n) {
-     base^(1:n)
-   }
-})
-  
-clusterExport(cl, c("data", "players.2", "teams.2"))
+# no_cores <- detectCores() - 1
+# 
+# # Initiate cluster
+# cl <- makeCluster(no_cores)
+# 
+# # Include relevant variables and packages
+# clusterEvalQ(cl, {
+#    library(jsonlite)
+#    library(dplyr)
+#    library(ggplot2)
+#    library(ggrepel)
+#    library(engsoccerdata)
+#    library(devtools)
+#    library(fplr)
+#    library(dplyr)
+#    library(reshape2)
+#    library(TTR)
+#    library(RcppRoll)
+#    geomSeries <- function(base, n) {
+#      base^(1:n)
+#    }
+# })
+#   
+# clusterExport(cl, c("data", "players.2", "teams.2"))
 
 # Get all data for modelling. Now only takes around 1 minute!
-modeldata <- parLapply(cl, sort(unique(data$id)), details)
-#modeldata <- lapply(sort(data$id), details)
+#modeldata <- parLapply(cl, sort(unique(data$id)), details)
+plyrs <- jsonlite::read_json("https://fantasy.premierleague.com/drf/bootstrap-static", simplifyVector = TRUE)
+modeldata <- lapply(sort(data$id), details, players=plyrs)
 
 # Close cluster
-stopCluster(cl)
+# stopCluster(cl)
 
 modeldata2 <- modeldata[!is.na(modeldata)]
 
@@ -174,6 +175,7 @@ print(roc(fitted.results, test$mins60))
 
 # Save model
 saveRDS(model, './startprob.rds')
+# model <- readRDS('./startprob.rds')
 
 # ------------------------------ Produce probability of starting next game ----------------------------- #
 
@@ -193,26 +195,11 @@ fpl.1 <- fpl %>%
   left_join(modelresults, by = 'id')
 
 fpl.1$prob60 <- ifelse(fpl.1$status == 'a', predict(model, newdata = fpl.1, type = 'response'), 0)
-  
+fpl.1 <- fpl.1 %>%
+  mutate(prob60 = ifelse(prob60 < .15, 0, prob60))
+
 # ------------ Predict assists -------------
-model <- readRDS('gbm_assist_model.RDS')
-
-# Get next set of fixtures. For now, only get one per gameweek
-fixtures = fixtures() %>%
-  filter(event == gw)
-
-# Get upcoming fixture details by team
-fix2 <- fixtures %>%
-  select(id, event_day, team_a, team_h) %>%
-  melt(id.vars=c('id','event_day')) %>%
-  group_by(value) %>%
-  mutate(rank = row_number(event_day)) %>%
-  filter(rank==1) %>%
-  inner_join(select(.,id, value), by = "id") %>%
-  filter(value.y != value.x) %>%
-  mutate(was_home = ifelse(variable=="team_a", FALSE, TRUE)) %>%
-  select(fixture=id, team_name=value.x, opponent_team=value.y, was_home)
-
+model2 <- readRDS('gbm_assist_model.RDS')
 
 # Get most recent row for each player from detail table, and get next fixture team strengths
 as_modeldata <- modeldata3 %>%
@@ -220,14 +207,14 @@ as_modeldata <- modeldata3 %>%
   mutate(rank = rank(desc(kickoff_time))) %>%
   filter(rank == 1) %>%
   mutate(avmins_lag = avmins) %>%
-  inner_join(select(fix2,-fixture), by = "team_name") %>%
+  left_join(select(fix2,-fixture), by = "team_name") %>%
   inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("team_name"="name")) %>%
   inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("opponent_team.y"="name")) %>%
   mutate(team_attack_strength = ifelse(was_home, strength_attack_home.x, strength_attack_away.x),
          opp_defence_strength = ifelse(was_home, strength_defence_away.y, strength_defence_home.y),
          strength_ratio = team_attack_strength/opp_defence_strength,
          position = as.factor(position)) %>%
-  select(round, fixture, id, web_name, position, team_name, opponent_team.y,
+  select(round, fixture, order_fix, num_fix, id, web_name, position, team_name, opponent_team.y,
          strength_ratio_act=strength_ratio, team_attack_strength,opp_defence_strength, influence_5, creativity_5, threat_5, ict_index_5,
          assists_5, crosses_5, bigchance_5, keypass_5, av_threat, max_threat, assists_any, assists_act) %>%
   ungroup
@@ -237,15 +224,14 @@ as_modeldata.2 <- as_modeldata[complete.cases(as_modeldata),] %>%
   filter(position != 'Goalkeeper')
 
 # Get predictions
-p_as <- predict(model, newdata=as_modeldata.2, type = "prob")
+p_as <- predict(model2, newdata=as_modeldata.2, type = "prob")
 
 as_modelresults <- cbind(as_modeldata.2, p_as) %>%
   mutate(xpas = ((OneAssist+TwoAssists+ThreeAssists)*3)) %>%
   mutate(probas = OneAssist+TwoAssists+ThreeAssists) %>%
-  dplyr::select(id, probas, xpas)
+  dplyr::select(id, team_attack_strength, opp_defence_strength, order_fix, num_fix, probas, xpas)
 
 fpl.1 <- fpl.1 %>%
-  left_join(as_modelresults, by = 'id') %>%
+  left_join(as_modelresults, by = c('id','order_fix')) %>%
   mutate_at(vars(probas, xpas), function(x) ifelse(is.na(x), 0, 
-                                                   ifelse(.$status != 'a', 0, x))) %>%
-  mutate(prob60 = ifelse(prob60 < .15, 0, prob60))
+                                                   ifelse(.$status != 'a', 0, x)))

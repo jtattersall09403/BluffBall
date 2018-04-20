@@ -30,7 +30,7 @@ fb <- fread('./Project files/Fantasybet - gw32.csv', encoding = "UTF-8") %>%
 # Filter fpl data
 fpl.4 <- fpl.3 %>%
   mutate(pos = as.character(pos),
-         initial = toupper(substr(first_name.x, 1, 1))) %>%
+         initial = toupper(substr(first_name, 1, 1))) %>%
   select(id, web_name, initial, team, pos)
 
 # Make names consistent

@@ -50,6 +50,25 @@ if(!identical(dt.all[[n]]$element, dt.3$element)) {
 n <- length(dt.all)
 sum(dt.all[[n]][1:11,'event_points'])
 
+# --------------------------------------- Fixtures -----------------------------
+
+# Get next set of fixtures
+fixtures = fixtures() %>%
+  filter(event == gw)
+
+# Get upcoming fixture details by team
+fix2 <- fixtures %>%
+  select(id, event_day, team_a, team_h) %>%
+  melt(id.vars=c('id','event_day')) %>%
+  group_by(value) %>%
+  mutate(order_fix = row_number(event_day)) %>%
+  inner_join(select(.,id, value), by = "id") %>%
+  filter(value.y != value.x) %>%
+  mutate(was_home = ifelse(variable=="team_a", FALSE, TRUE)) %>%
+  group_by(value.x) %>%
+  mutate(num_fix = n()) %>%
+  select(fixture=id, order_fix, num_fix, team_name=value.x, opponent_team=value.y, was_home)
+
 # -------------------------------------- Goalscorer odds -----------------------
 
 url <- 'http://sports.williamhill.com/bet/en-gb/betting/g/348/Anytime+Goalscorer.html'
@@ -190,10 +209,10 @@ url <- 'http://sports.williamhill.com/bet/en-gb/betting/g/158525/To+Keep+a+Clean
 
 webpage <- read_html(url)
 
-#Using CSS selectors to scrap the rankings section
+#Using CSS selectors to scrape the odds
 teams_odds <- html_nodes(webpage,'.leftPad')
 
-#Converting the ranking data to text
+#Converting the pdds data to text
 teams_data <- html_text(teams_odds)
 
 # Filter out headers
@@ -230,18 +249,21 @@ cs.split <- strsplit(cs, split = "/") %>%
   do.call(rbind, .)
 
 # Bind players and odds
-cs <- data.frame('team' = as.character(teams_data), 'cs' = cs.split, stringsAsFactors = F)
+cs <- data.frame('team' = as.character(teams_data), 'cs' = cs.split, stringsAsFactors = F) %>%
+  group_by(team) %>%
+  mutate(order_fix=row_number())
 
-# Keep first occurrence of each player (focusing on next gameweek)
-cs <- cs[match(unique(cs$team), cs$team),]
+# Keep one probability for each fixture in next gameweek
+# cs <- cs[match(unique(cs$team), cs$team),]
 cs$team <- ifelse(cs$team == "Tottenham", "Spurs", cs$team)
+cs <- inner_join(fix2, cs, by=c("team_name"="team", "order_fix"))
 
 # See the results
 View(arrange(cs, desc(cs)))
 
 # Match cs odds to fpl data
 fpl <- fpl %>%
-  left_join(cs, by = 'team')
+  left_join(cs, by = c('team'='team_name'))
 
 # ------------------------ Predict likelihood of playing 60 minutes ------------------------
 
@@ -250,11 +272,66 @@ fpl <- fpl %>%
 source('./startprob.R')
 
 
+# ------------------------ Deal with double gameweeks -------------------------------
+
+
+# Some complex probability going on here
+fpl.1.1 <- fpl.1 %>%
+  group_by(id) %>%
+  arrange(order_fix) %>%
+  mutate(prev_opp_strength = lag(opp_defence_strength)) %>%
+  mutate(goalprob=ifelse(order_fix==2, goalprob*prev_opp_strength/opp_defence_strength, goalprob),
+         goalprob1=ifelse(order_fix==2, goalprob1*prev_opp_strength/opp_defence_strength, goalprob1),
+         probBrace=ifelse(order_fix==2, probBrace*prev_opp_strength/opp_defence_strength, probBrace),
+         probHt=ifelse(order_fix==2, probHt*prev_opp_strength/opp_defence_strength, probHt)) %>%
+  mutate(goalprob_new = ifelse(order_fix==2,
+                           1-(1-goalprob)*(1-lag(goalprob)),
+                           goalprob),
+         goalprob1_new = ifelse(order_fix==2,
+                            (1-lag(goalprob))*goalprob1 + lag(goalprob1)*(1-goalprob),
+                            goalprob1),
+         probBrace_new = ifelse(order_fix==2,
+                            (1-lag(goalprob))*probBrace +
+                              lag(probBrace)*(1-goalprob) +
+                              lag(goalprob1)*goalprob1,
+                            probBrace),
+         probHt_new = ifelse(order_fix==2,
+                         (1-lag(goalprob))*probHt +
+                           lag(probHt)*(1-goalprob) +
+                           lag(goalprob1)*probBrace +
+                           lag(probBrace)*goalprob1,
+                         probHt),
+         cs_new = ifelse(order_fix==2,
+                                (1-lag(cs))*cs + lag(cs)*(1-cs),
+                                cs),
+         cs2_new = ifelse(order_fix==2,
+                         lag(cs)*cs,
+                         0),
+         as_new = ifelse(order_fix==2,
+                         (1-lag(probas))*probas + lag(probas)*(1-probas),
+                         probas),
+         as2_new = ifelse(order_fix==2,
+                          lag(probas)*probas,
+                          0)
+         ) %>%
+  mutate(goalprob=goalprob_new,
+         goalprob1=goalprob1_new,
+         probBrace=probBrace_new,
+         probHt=probHt_new,
+         cs=cs_new,
+         cs2=cs2_new,
+         probas=as_new,
+         probas2=as2_new) %>%
+  group_by(id) %>%
+  summarise_at(vars(goalprob:goalprob1, cs, cs2, prob60, probas, probas2, xpas), max)
+
+fpl.2 <- fpldat %>%
+  inner_join(fpl.1.1, by = "id")
+
 # ------------------- Expected points -----------------
 
 
 # Check how many have odds available
-fpl.2 <- fpl.1
 print(c(paste0(100*round(sum(!is.na(fpl.2$goalprob))/nrow(fpl.2[fpl.2$pos != 'Goalkeeper',]),3), '% of players have goalscorer odds'),
         paste0(100*round(sum(fpl.2$probas>0)/nrow(fpl.2[fpl.2$pos != 'Goalkeeper',]),3), '% of players have assist predictions > 0'),
         paste0(100*round(sum(!is.na(fpl.2$cs))/nrow(fpl.2),3), '% of players have clean sheet odds'),
@@ -280,16 +357,17 @@ fpl.3 <- fpl.2 %>%
          prob60 = prob60) %>%
   mutate(prob0 = .2 * (1-prob60),
          probless60 = .8 * (1-prob60)) %>%
-  mutate(prob60 = ifelse(prob60 < 0.08, 0, prob60)) %>%
+  mutate(prob60 = ifelse(prob60 < 0.15, 0, prob60)) %>%
   mutate(prob60 = ifelse(as.numeric(ep_next) <= 0, 0, prob60)) %>% # Set probability of playing to 0 if no fixture
-  mutate(xgp1 = goalprob1 * goal,
-         xgp2 = probBrace * goal * 2,
-         xgp3 = probHt * goal * 3,
+  mutate(xpas = prob60*(3*probas + 6*probas2),
+         xgp1 = prob60*goalprob1 * goal,
+         xgp2 = prob60*probBrace * goal * 2,
+         xgp3 = prob60*probHt * goal * 3,
          xm = prob60 * 90,
          xgp = xgp1 + xgp2 + xgp3) %>%
   mutate(xm = ifelse(is.na(xm), 0, xm)) %>%
   mutate(xpap = ifelse(xm >= 60, 2, ifelse(xm > 0, 1, 0)),
-         xpcs = prob60 * cs * cleansheet) %>%
+         xpcs = (prob60 * cs * cleansheet) + (prob60 * cs2 * cleansheet)) %>%
   mutate(xp = ifelse(is.na(xgp),0,xgp) + ifelse(is.na(xpap),0,xpap) + xpcs + ifelse(is.na(xpas),0,xpas)) %>%
   mutate(xp = ifelse(prob60 == 0, 0, xp)) #%>% # Set to 0 if not predicted to play
   #mutate(xp = ifelse(is.na(goalprob), as.numeric(ep_next), xp)) # Set to modelled value if goal odds not present.
@@ -303,17 +381,17 @@ fpl.3 <- fpl.2 %>%
 # Get all fpl pairs
 fpl.3$dum <- 1
 fplsquad <- fpl.3 %>%
-  select(dum, id,  first_name.x, second_name.x, pos, team, now_cost, xp) %>%
-  inner_join(select(fpl.3, id, dum, first_name.x, second_name.x, pos, team, now_cost, xp), by = 'dum') %>%
-  filter(!(first_name.x.x == first_name.x.y & second_name.x.x == second_name.x.y)) %>%
+  select(dum, id,  first_name, second_name, pos, team, now_cost, xp) %>%
+  inner_join(select(fpl.3, id, dum, first_name, second_name, pos, team, now_cost, xp), by = 'dum') %>%
+  filter(!(first_name.x == first_name.y & second_name.x == second_name.y)) %>%
   mutate(pos = paste(pos.x, pos.y, sep="-"),
          price = now_cost.x + now_cost.y,
          xp = xp.x + xp.y) %>%
   filter(xp > 2) %>%
   select(id.x,
          id.y,
-         second_name.x.x,
-         second_name.x.y,
+         second_name.x,
+         second_name.y,
          pos, price, xp)
 
 # Remove duplicates
@@ -392,7 +470,35 @@ rm(list = c('cs',
             'tmp',
             'autosubs',
             'dt.squad',
-            'nonmatched'))
+            'nonmatched',
+            'as_modeldata',
+            'as_modeldata.2',
+            'as_modelresults',
+            'clubs',
+            'dt',
+            'dt_other',
+            'dt.details',
+            'dt.last',
+            'dt.last.2',
+            'fb',
+            'fix2',
+            'fixtures',
+            'fpl.1.1',
+            'kap',
+            'model2',
+            'modelresults',
+            'modelresults.2',
+            'p_as',
+            'players.2',
+            'probs',
+            'sim',
+            't2',
+            'teamdetails',
+            'teams.2',
+            'teamsim.1',
+            'teamsim.2',
+            'x',
+            'xt'))
 
 # Clean up remaining objects
 fpl <- fpl %>%
