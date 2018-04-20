@@ -22,7 +22,7 @@ mdl <- fpl.3 %>%
          event_points = event_points.y)
 
 # Record gw
-mdl$gw <- 33
+mdl$gw <- 34
 
 # Save data
 saveRDS(mdl, paste0('./Project files/Data archive/gw', gw, '.rds'))

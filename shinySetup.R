@@ -15,7 +15,7 @@ source('./Dreamteam/Dreamteam - recursive v2.R')
 load('.RData')
 
 # Set upcoming gw
-gw <- 34
+gw <- 35
 
 # ----------------- FPL data ---------------
 
@@ -49,6 +49,7 @@ if(!identical(dt.all[[n]]$element, dt.3$element)) {
 # Show total points
 n <- length(dt.all)
 sum(dt.all[[n]][1:11,'event_points'])
+dt.last.2 <- dt.all[[n]]
 
 # --------------------------------------- Fixtures -----------------------------
 
@@ -165,8 +166,7 @@ keepers <- fpldat %>%
 
 # Append goalkeepers
 names(keepers) <- names(dedup)
-fpl <- rbind(as.data.frame(dedup), as.data.frame(keepers)) %>%
-  mutate(goalprob1 = goalprob - probBrace - probHt)
+fpl <- rbind(as.data.frame(dedup), as.data.frame(keepers))
 
 # Show whose goalscorer odds are missing
 fpl %>%
@@ -174,7 +174,7 @@ fpl %>%
   select(web_name, team, goalprob, form) %>%
   arrange(desc(form)) %>% View
 
-# Get those that didn't match and sor tout manually
+# Get those that didn't match and sort out manually
 nonmatched <- fpl %>%
   filter(pos != 'Goalkeeper', (is.na(goalprob))) %>%
   select(-goalprob,
@@ -196,7 +196,15 @@ nonmatched <- fpl %>%
 fpl <- fpl %>%
   filter(!id %in% nonmatched$id) %>%
   union(nonmatched)
-  
+
+# Set goal probabilities to 0 if no fixture in the next gameweek
+fpl <- fpl %>%
+  mutate(goalprob = ifelse(!team %in% fix2$team_name, 0, goalprob),
+         goalprob1 = ifelse(!team %in% fix2$team_name, 0, goalprob1),
+         probBrace = ifelse(!team %in% fix2$team_name, 0, probBrace),
+         probHt = ifelse(!team %in% fix2$team_name, 0, probHt))  %>%
+         mutate(goalprob1 = goalprob - probBrace - probHt)
+
 # Show whose goalscorer odds are missing
 fpl %>%
   filter(pos != 'Goalkeeper', (is.na(goalprob))) %>%
@@ -265,12 +273,15 @@ View(arrange(cs, desc(cs)))
 fpl <- fpl %>%
   left_join(cs, by = c('team'='team_name'))
 
+# Set cs probabilities to 0 if no fixture in the next gameweek
+fpl <- fpl %>%
+  mutate(cs = ifelse(!team %in% fix2$team_name, 0, cs))
+
 # ------------------------ Predict likelihood of playing 60 minutes ------------------------
 
 # And get historic data for each player
 
 source('./startprob.R')
-
 
 # ------------------------ Deal with double gameweeks -------------------------------
 
@@ -323,23 +334,59 @@ fpl.1.1 <- fpl.1 %>%
          probas=as_new,
          probas2=as2_new) %>%
   group_by(id) %>%
-  summarise_at(vars(goalprob:goalprob1, cs, cs2, prob60, probas, probas2, xpas), max)
+  summarise_at(vars(goalprob:goalprob1, cs, cs2, prob60, probas, probas2), max)
 
 fpl.2 <- fpldat %>%
-  inner_join(fpl.1.1, by = "id")
+  inner_join(fpl.1.1, by = "id") %>%
+  mutate(xpas = 3 * probas + 6 * probas2)
+
+# ------------------- FPL scout predicted lineups -----
+
+result <- getLineups(fpl.2, "https://www.fantasyfootballscout.co.uk/team-news/")
+
+# Adjust prob60 for blank gameweeks
+fpl.2$prob60 = ifelse(fpl.2$team %in% fix2$team_name, fpl.2$prob60, 0)
+
+# Bind to fpl file
+fpl.2 <- fpl.2 %>%
+  left_join(result, by = "id") %>%
+  mutate(pred_lineup = ifelse(is.na(pred_lineup), 0, 1))
+fpl.2$pred_lineup <- ifelse(fpl.2$team %in% fix2$team_name, fpl.2$pred_lineup, 0)
+
+# Check discrepancies
+fpl.2 %>% filter(pred_lineup == 1 & prob60 < .75) %>% select(web_name, team, prob60) %>% View
+fpl.2 %>% filter(pred_lineup == 0 & prob60 > .75) %>%  select(web_name, team, prob60) %>% View
+
+# Manual overrides
+fpl.2 <- fpl.2 %>%
+  mutate(prob60 = ifelse(web_name %in% c("Jesus",
+                                         "Cech",
+                                         "Bellerin",
+                                         "Ozil",
+                                         "Ramsey",
+                                         "Tarkowski",
+                                         "Lacazette",
+                                         "Salah",
+                                         "Robertson",
+                                         "De Bruyne",
+                                         "Walker",
+                                         "Jordan Ayew"), 0.9, prob60)) %>%
+  mutate(prob60 = ifelse(web_name %in% c("Aubameyang"), 0.5 * prob60, prob60))
 
 # ------------------- Expected points -----------------
 
 
 # Check how many have odds available
 print(c(paste0(100*round(sum(!is.na(fpl.2$goalprob))/nrow(fpl.2[fpl.2$pos != 'Goalkeeper',]),3), '% of players have goalscorer odds'),
-        paste0(100*round(sum(fpl.2$probas>0)/nrow(fpl.2[fpl.2$pos != 'Goalkeeper',]),3), '% of players have assist predictions > 0'),
+        paste0(100*round(sum(fpl.2$probas>0, na.rm = T)/nrow(fpl.2[fpl.2$pos != 'Goalkeeper',]),3), '% of players have assist predictions'),
         paste0(100*round(sum(!is.na(fpl.2$cs))/nrow(fpl.2),3), '% of players have clean sheet odds'),
         paste0(100*round(sum(!is.na(fpl.2$prob60))/nrow(fpl.2),3), '% of players have a playing time prediction')))
 
 # Show whose goalscorer odds are missing
 fpl.2 %>%
-  filter(pos != 'Goalkeeper', (is.na(goalprob) | is.na(prob60))) %>%
+  filter(pos != 'Goalkeeper',
+         (is.na(goalprob) | is.na(prob60)),
+         team %in% fix2$team_name) %>%
   select(web_name, team, goalprob, prob60) %>%
   arrange(desc(prob60)) %>% View
 
@@ -378,6 +425,13 @@ fpl.3 <- fpl.2 %>%
 #   select(web_name, team, goalprob, prob60, xp) %>%
 #   arrange(desc(prob60)) %>% View
 
+# Get dreamteam
+dt.3 <- dreamteam(fpl.3)
+
+dt.3
+sum(dt.3[1:11,'xp'])
+sum(dt.3['now_cost'])
+
 # Get all fpl pairs
 fpl.3$dum <- 1
 fplsquad <- fpl.3 %>%
@@ -397,13 +451,6 @@ fplsquad <- fpl.3 %>%
 # Remove duplicates
 fplsquad <- fplsquad[!duplicated(data.frame(t(apply(fplsquad[,c(1,2)], 1, sort)), fplsquad$price)),]
 
-
-# Get dreamteam
-dt.3 <- dreamteam(fpl.3)
-
-dt.3
-sum(dt.3[1:11,'xp'])
-sum(dt.3['now_cost'])
 
 # Remove unnecessary objects
 rm(list = c('cs',
@@ -479,7 +526,6 @@ rm(list = c('cs',
             'dt_other',
             'dt.details',
             'dt.last',
-            'dt.last.2',
             'fb',
             'fix2',
             'fixtures',

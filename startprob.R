@@ -25,7 +25,7 @@ teams.2 = teams()
 players.2 = players()
 
 # Define function to get all detailed player data
-details <- function(id) {
+details <- function(id, plyrs) {
   tryCatch({
     # get player details
     x = playerDetailed2(id, plyrs) %>%
@@ -120,14 +120,14 @@ details <- function(id) {
 # Get all data for modelling. Now only takes around 1 minute!
 #modeldata <- parLapply(cl, sort(unique(data$id)), details)
 plyrs <- jsonlite::read_json("https://fantasy.premierleague.com/drf/bootstrap-static", simplifyVector = TRUE)
-modeldata <- lapply(sort(data$id), details, players=plyrs)
+modeldata <- lapply(sort(data$id), details, plyrs=plyrs)
 
 # Close cluster
 # stopCluster(cl)
 
 modeldata2 <- modeldata[!is.na(modeldata)]
 
-# Prepare data for modelling. Create binary 60+ mins variable, and scale assist predictors within teams
+# Prepare data for modelling. Create binary 60+ mins variable, and scale assist predictors within rounds
 modeldata3 <- do.call(rbind, modeldata2) %>%
   filter(!is.na(avmins)) %>%
   mutate(mins60 = ifelse(minutes >= 60, 1, 0),
@@ -136,6 +136,7 @@ modeldata3 <- do.call(rbind, modeldata2) %>%
   group_by(team_name, round) %>%
   mutate(av_threat = mean(threat_5, na.rm = TRUE),
          max_threat = max(threat_5, na.rm = TRUE)) %>%
+  group_by(round) %>%
   mutate_at(vars(influence_5, creativity_5, threat_5, ict_index_5,
                  assists_5, crosses_5, bigchance_5, keypass_5), function(x) as.numeric(scale(x)))
 
@@ -198,40 +199,59 @@ fpl.1$prob60 <- ifelse(fpl.1$status == 'a', predict(model, newdata = fpl.1, type
 fpl.1 <- fpl.1 %>%
   mutate(prob60 = ifelse(prob60 < .15, 0, prob60))
 
-# ------------ Predict assists -------------
-model2 <- readRDS('gbm_assist_model.RDS')
+# ------------ Predict assists -----------------------------------------------------
+# ------------ Deprecated until we have enough data to predict it accurately -------
+# 
+# model2 <- readRDS('gbm_assist_model.RDS')
+# 
+# # Get most recent row for each player from detail table, and get next fixture team strengths
+# as_modeldata <- modeldata3 %>%
+#   group_by(id) %>%
+#   mutate(rank = rank(desc(kickoff_time))) %>%
+#   filter(rank == 1) %>%
+#   mutate(avmins_lag = avmins) %>%
+#   left_join(select(fix2,-fixture), by = "team_name") %>%
+  # inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("team_name"="name")) %>%
+  # inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("opponent_team.y"="name")) %>%
+  # mutate(team_attack_strength = ifelse(was_home, strength_attack_home.x, strength_attack_away.x),
+  #        opp_defence_strength = ifelse(was_home, strength_defence_away.y, strength_defence_home.y),
+  #        strength_ratio = team_attack_strength/opp_defence_strength,
+  #        position = as.factor(position)) %>%
+#   select(round, fixture, order_fix, num_fix, id, web_name, position, team_name, opponent_team.y,
+#          strength_ratio_act=strength_ratio, team_attack_strength,opp_defence_strength, influence_5, creativity_5, threat_5, ict_index_5,
+#          assists_5, crosses_5, bigchance_5, keypass_5, av_threat, max_threat, assists_any, assists_act) %>%
+#   ungroup
+# 
+# # Prepare data
+# as_modeldata.2 <- as_modeldata[complete.cases(as_modeldata),] %>%
+#   filter(position != 'Goalkeeper')
+# 
+# # Get predictions
+# p_as <- predict(model2, newdata=as_modeldata.2, type = "prob")
+# 
+# as_modelresults <- cbind(as_modeldata.2, p_as) %>%
+#   mutate(xpas = ((OneAssist+TwoAssists+ThreeAssists)*3)) %>%
+#   mutate(probas = OneAssist+TwoAssists+ThreeAssists) %>%
+#   dplyr::select(id, team_attack_strength, opp_defence_strength, order_fix, num_fix, probas, xpas)
 
-# Get most recent row for each player from detail table, and get next fixture team strengths
-as_modeldata <- modeldata3 %>%
-  group_by(id) %>%
-  mutate(rank = rank(desc(kickoff_time))) %>%
-  filter(rank == 1) %>%
-  mutate(avmins_lag = avmins) %>%
-  left_join(select(fix2,-fixture), by = "team_name") %>%
-  inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("team_name"="name")) %>%
-  inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("opponent_team.y"="name")) %>%
+# fpl.1 <- fpl.1 %>%
+#   left_join(as_modelresults, by = c('id','order_fix')) %>%
+#   mutate_at(vars(probas, xpas), function(x) ifelse(is.na(x), 0, 
+#                                                    ifelse(.$status != 'a', 0, x)))
+
+# Get upcoming attack:defence strength ratios for weighting assist probability
+strengthratios <- fpl.1 %>%
+  inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("team"="name")) %>%
+  inner_join(dplyr::select(teams.2, name, strength_overall_home:strength_defence_away), by = c("opponent_team"="name")) %>%
   mutate(team_attack_strength = ifelse(was_home, strength_attack_home.x, strength_attack_away.x),
          opp_defence_strength = ifelse(was_home, strength_defence_away.y, strength_defence_home.y),
-         strength_ratio = team_attack_strength/opp_defence_strength,
-         position = as.factor(position)) %>%
-  select(round, fixture, order_fix, num_fix, id, web_name, position, team_name, opponent_team.y,
-         strength_ratio_act=strength_ratio, team_attack_strength,opp_defence_strength, influence_5, creativity_5, threat_5, ict_index_5,
-         assists_5, crosses_5, bigchance_5, keypass_5, av_threat, max_threat, assists_any, assists_act) %>%
-  ungroup
+         strength_ratio = team_attack_strength/opp_defence_strength) %>%
+    select(team, strength_ratio, team_attack_strength, opp_defence_strength) %>%
+  unique
 
-# Prepare data
-as_modeldata.2 <- as_modeldata[complete.cases(as_modeldata),] %>%
-  filter(position != 'Goalkeeper')
-
-# Get predictions
-p_as <- predict(model2, newdata=as_modeldata.2, type = "prob")
-
-as_modelresults <- cbind(as_modeldata.2, p_as) %>%
-  mutate(xpas = ((OneAssist+TwoAssists+ThreeAssists)*3)) %>%
-  mutate(probas = OneAssist+TwoAssists+ThreeAssists) %>%
-  dplyr::select(id, team_attack_strength, opp_defence_strength, order_fix, num_fix, probas, xpas)
-
+# Get simple assist prediction. Effectively just for tie-breaking.
 fpl.1 <- fpl.1 %>%
-  left_join(as_modelresults, by = c('id','order_fix')) %>%
-  mutate_at(vars(probas, xpas), function(x) ifelse(is.na(x), 0, 
-                                                   ifelse(.$status != 'a', 0, x)))
+  left_join(strengthratios, by = "team") %>%
+  mutate(probas = ifelse(!team %in% fix2$team_name, 0, prob60 * 90*assists/minutes),
+         probas = probas * strength_ratio) %>%
+  arrange(desc(probas))

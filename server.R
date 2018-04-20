@@ -31,10 +31,10 @@ shinyServer(function(input, output) {
   output$goalscorer_tab <- DT::renderDataTable({
     
     # Create table
-    fpl %>%
+    fpl.3 %>%
       filter(!is.na(goalprob)) %>%
+      mutate(goalprob = round(100*prob60*goalprob, 1)) %>%
       arrange(desc(goalprob)) %>%
-      mutate(goalprob = round(100*goalprob, 1)) %>%
       select('Player' = web_name, 'Probability of scoring (%)' = goalprob)
     
   }, options = list(pageLength = 10, scrollX = TRUE))
@@ -57,6 +57,7 @@ shinyServer(function(input, output) {
     fpl.3 %>%
       filter((is.na(goalprob) |
              is.na(cs)),
+             pos != "Goalkeeper",
              news == '',
              prob60 > 0.1) %>%
       arrange(desc(total_points)) %>%
@@ -118,7 +119,7 @@ shinyServer(function(input, output) {
     
     # Link expected points
     myteam2 <- myteam %>%
-      left_join(select(fpl.3, id, first_name.x, web_name, pos, team, cs, goalprob, xp), by = c('element'='id')) %>%
+      left_join(select(fpl.3, id, first_name, web_name, pos, team, cs, goalprob, xp), by = c('element'='id')) %>%
       group_by(player_name) %>%
       mutate(rank = rank(desc(xp), ties.method='first')) %>%
       mutate(position = as.numeric(position),
@@ -280,6 +281,7 @@ shinyServer(function(input, output) {
              'New xp' = round(xp.y,1),
              'Difference' = round(xpdiff,1),
              'Price difference' = (now_cost-price)/10) %>%
+      ungroup %>%
       select(`Transfer out`, `Original xp`, `Transfer in`, `New xp`, `Difference`, `Price difference`)
     }, options = list(scrollX = TRUE))
   
@@ -315,13 +317,13 @@ shinyServer(function(input, output) {
     mysquad$dum <- 1
     squad <- mysquad %>%
       inner_join(mysquad, by = 'dum') %>%
-      filter(!(first_name.x.x == first_name.x.y & player_name.x == player_name.y)) %>%
+      filter(!(first_name.x == first_name.y & player_name.x == player_name.y)) %>%
       mutate(pos = paste(pos.x, pos.y, sep="-"),
              price = price.x + price.y,
              xp = xp_eff.x + xp_eff.y) %>%
-      select(first_name.x.x,
+      select(first_name.x,
              player_name.x,
-             first_name.x.y,
+             first_name.y,
              player_name.y,
              pos, price, xp)
     
@@ -340,12 +342,12 @@ shinyServer(function(input, output) {
       arrange(desc(xpdiff))
     
     # Remove duplicates
-    double_transfers <- double_transfers[!duplicated(data.frame(t(apply(double_transfers[,c('second_name.x.x','second_name.x.y')], 1, sort)), double_transfers$price.x)),]
+    double_transfers <- double_transfers[!duplicated(data.frame(t(apply(double_transfers[,c('second_name.x','second_name.y')], 1, sort)), double_transfers$price.x)),]
     
     return(double_transfers)
   })
   
-  # Display single transfers
+  # Display double transfers
   output$double_trans <- DT::renderDataTable({
     
     df <-  double_trans()
@@ -358,7 +360,7 @@ shinyServer(function(input, output) {
       select(-rank) %>%
       mutate('Transfer out' = paste(player_name.x, player_name.y, sep = ', '),
              'Original xp' = round(xp.x,1),
-             'Transfer in' = paste(second_name.x.x, second_name.x.y, sep = ', '),
+             'Transfer in' = paste(second_name.x, second_name.y, sep = ', '),
              'New xp' = round(xp.y,1),
              'Difference' = round(xpdiff,1)) %>%
       select(`Transfer out`, `Original xp`, `Transfer in`, `New xp`, `Difference`)
@@ -459,7 +461,7 @@ shinyServer(function(input, output) {
     # Get team after transfers
     newteam <- fpl.3[fpl.3$id %in% new_ids,] %>%
       mutate(position = row_number(), 'player_name'= web_name) %>%
-      select(position, player_name, 'price' = now_cost, id, first_name.x, web_name, pos, team, goalprob, xp)
+      select(position, player_name, 'price' = now_cost, id, first_name, web_name, pos, team, goalprob, xp)
     
     return(newteam)
   })
